@@ -65,6 +65,16 @@ class OwnerAgreement extends Model
         return $this->hasMany(OwnerAgreementStatusHistory::class);
     }
 
+    public function disputes(): HasMany
+    {
+        return $this->hasMany(AgreementDispute::class);
+    }
+
+    public function additionalPayments(): HasMany
+    {
+        return $this->hasMany(AgreementAdditionalPayment::class);
+    }
+
     public function scopeForBranch(Builder $query, int $branchId): Builder
     {
         return $query->where($query->getModel()->qualifyColumn('branch_id'), $branchId);

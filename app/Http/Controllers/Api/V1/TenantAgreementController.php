@@ -61,7 +61,7 @@ class TenantAgreementController extends Controller
     {
         Gate::authorize('view', $tenantAgreement);
 
-        return new TenantAgreementResource($tenantAgreement->load(['tenant', 'properties', 'installments']));
+        return new TenantAgreementResource($tenantAgreement->load(['tenant', 'properties', 'installments', 'disputes.comments', 'additionalPayments']));
     }
 
     public function update(UpdateTenantAgreementRequest $request, TenantAgreement $tenantAgreement, BranchContext $branchContext): TenantAgreementResource

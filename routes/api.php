@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\AccountsController;
 use App\Http\Controllers\Api\V1\AdministrationController;
 use App\Http\Controllers\Api\V1\AgreementInstallmentController;
+use App\Http\Controllers\Api\V1\AgreementOperationsController;
 use App\Http\Controllers\Api\V1\AgreementPaymentController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\CustomerController;
@@ -41,6 +42,10 @@ Route::prefix('v1')->group(function () {
         Route::post('/owner-agreements/{ownerAgreement}/payments', [AgreementPaymentController::class, 'owner']);
         Route::patch('/owner-agreements/{agreement}/installments/{installment}/status', [AgreementInstallmentController::class, 'updateOwner']);
         Route::patch('/tenant-agreements/{agreement}/installments/{installment}/status', [AgreementInstallmentController::class, 'updateTenant']);
+        Route::patch('/{type}-agreements/{agreement}/status', [AgreementOperationsController::class, 'transition'])->where('type', 'owner|tenant');
+        Route::post('/{type}-agreements/{agreement}/disputes', [AgreementOperationsController::class, 'disputes'])->where('type', 'owner|tenant');
+        Route::post('/agreement-disputes/{dispute}/comments', [AgreementOperationsController::class, 'comment']);
+        Route::post('/{type}-agreements/{agreement}/additional-payments', [AgreementOperationsController::class, 'additionalPayment'])->where('type', 'owner|tenant');
         Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('properties', PropertyController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('owner-agreements', OwnerAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);

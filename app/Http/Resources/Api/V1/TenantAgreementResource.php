@@ -25,6 +25,8 @@ class TenantAgreementResource extends JsonResource
                 'amount' => $installment->amount, 'paid_amount' => $installment->paid_amount, 'balance' => number_format((float) $installment->amount - (float) $installment->paid_amount, 2, '.', ''),
                 'payment_mode' => $installment->payment_mode, 'status' => $installment->status, 'notes' => $installment->notes,
             ])->values()),
+            'disputes' => $this->whenLoaded('disputes'),
+            'additional_payments' => $this->whenLoaded('additionalPayments'),
             'start_date' => $this->start_date?->format('Y-m-d'),
             'end_date' => $this->end_date?->format('Y-m-d'),
             'total_amount' => $this->total_amount,
