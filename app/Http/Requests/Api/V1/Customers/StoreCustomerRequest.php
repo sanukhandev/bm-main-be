@@ -39,6 +39,8 @@ class StoreCustomerRequest extends FormRequest
             'state_or_emirate' => ['nullable', 'string', 'max:255'],
             'country_code' => ['nullable', 'string', 'size:2'],
             'notes' => ['nullable', 'string'],
+            'roles' => ['sometimes', 'array', 'min:1'],
+            'roles.*' => ['required', 'in:owner,tenant', 'distinct'],
         ];
     }
 }
