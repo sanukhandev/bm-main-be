@@ -6,6 +6,11 @@ use App\Support\Branch\BranchContext;
 
 trait BelongsToBranch
 {
+    public function scopeForBranch($query, int $branchId)
+    {
+        return $query->where($this->qualifyColumn('branch_id'), $branchId);
+    }
+
     public function resolveRouteBindingQuery($query, $value, $field = null)
     {
         $field ??= $this->getRouteKeyName();
