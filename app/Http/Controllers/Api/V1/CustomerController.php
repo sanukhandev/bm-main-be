@@ -9,6 +9,7 @@ use App\Http\Requests\Api\V1\Customers\UpdateCustomerRequest;
 use App\Http\Resources\Api\V1\CustomerResource;
 use App\Models\Customer;
 use App\Support\Branch\BranchContext;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
@@ -47,11 +48,19 @@ class CustomerController extends Controller
     {
         Gate::authorize('create', Customer::class);
 
-        $customer = new Customer($request->validated());
-        $customer->forceFill([
-            'branch_id' => $branchContext->id(),
-            'status' => 'active',
-        ])->save();
+        $data = $request->validated();
+        $roles = $data['roles'] ?? [];
+        unset($data['roles']);
+        $customer = DB::transaction(function () use ($data, $roles, $branchContext): Customer {
+            $customer = new Customer($data);
+            $customer->forceFill([
+                'branch_id' => $branchContext->id(),
+                'status' => 'active',
+            ])->save();
+            $this->syncRoles($customer, $roles, $branchContext->id());
+
+            return $customer;
+        });
 
         return new CustomerResource($customer->load('businessRoles'));
     }
@@ -66,7 +75,15 @@ class CustomerController extends Controller
     public function update(UpdateCustomerRequest $request, Customer $customer): CustomerResource
     {
         Gate::authorize('update', $customer);
-        $customer->update($request->validated());
+        $data = $request->validated();
+        $roles = $data['roles'] ?? null;
+        unset($data['roles']);
+        DB::transaction(function () use ($customer, $data, $roles): void {
+            $customer->update($data);
+            if ($roles !== null) {
+                $this->syncRoles($customer, $roles, $customer->branch_id);
+            }
+        });
 
         return new CustomerResource($customer->refresh()->load('businessRoles'));
     }
@@ -78,5 +95,13 @@ class CustomerController extends Controller
         $customer->delete();
 
         return response()->noContent();
+    }
+
+    private function syncRoles(Customer $customer, array $roles, int $branchId): void
+    {
+        $customer->businessRoles()->delete();
+        foreach (array_unique($roles) as $role) {
+            $customer->businessRoles()->create(['branch_id' => $branchId, 'role' => $role]);
+        }
     }
 }

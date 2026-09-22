@@ -15,7 +15,11 @@ class TenantAgreementResource extends JsonResource
             'agreement_no' => $this->agreement_no,
             'tenant_customer_id' => $this->tenant_customer_id,
             'tenant' => new CustomerResource($this->whenLoaded('tenant')),
-            'properties' => PropertyResource::collection($this->whenLoaded('properties')),
+            'properties' => $this->whenLoaded('properties', fn () => $this->properties->map(fn ($property) => [
+                'property_id' => $property->id,
+                'source_owner_agreement_id' => $property->pivot->source_owner_agreement_id,
+                'property' => new PropertyResource($property),
+            ])->values()),
             'start_date' => $this->start_date?->format('Y-m-d'),
             'end_date' => $this->end_date?->format('Y-m-d'),
             'total_amount' => $this->total_amount,

@@ -1,7 +1,9 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AdministrationController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\CustomerController;
+use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\OwnerAgreementController;
 use App\Http\Controllers\Api\V1\PropertyController;
 use App\Http\Controllers\Api\V1\TenantAgreementController;
@@ -18,7 +20,13 @@ Route::prefix('v1')->group(function () {
         });
     });
 
+    Route::prefix('admin')->middleware(['auth:sanctum', 'user.active', 'throttle:api'])->group(function () {
+        Route::get('/users', [AdministrationController::class, 'users']);
+        Route::get('/roles', [AdministrationController::class, 'roles']);
+    });
+
     Route::middleware(['auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
+        Route::get('/dashboard/metrics', [DashboardController::class, 'metrics']);
         Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('properties', PropertyController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('owner-agreements', OwnerAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);

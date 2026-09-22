@@ -143,7 +143,7 @@ class ApiFoundationTest extends TestCase
                 'display_name' => 'Created In A',
             ])
             ->assertCreated()
-            ->assertJsonPath('data.branch_id', null);
+            ->assertJsonPath('data.branch_id', $this->branchA);
 
         $this->assertDatabaseHas('customers', ['branch_id' => $this->branchA, 'customer_code' => 'A-002']);
         $this->assertDatabaseMissing('customers', ['branch_id' => $this->branchB, 'customer_code' => 'A-002']);
@@ -172,6 +172,61 @@ class ApiFoundationTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.customer_code', 'B-001');
+    }
+
+    public function test_dashboard_metrics_are_scoped_to_the_active_branch(): void
+    {
+        DB::table('customer_role_assignments')->insert([
+            ['branch_id' => $this->branchA, 'customer_id' => $this->customerA, 'role' => 'owner', 'created_at' => now(), 'updated_at' => now()],
+            ['branch_id' => $this->branchA, 'customer_id' => $this->customerA, 'role' => 'tenant', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+        DB::table('properties')->insert([
+            'branch_id' => $this->branchA,
+            'owner_customer_id' => $this->customerA,
+            'property_code' => 'A-PROP-001',
+            'property_type' => 'apartment',
+            'name' => 'A Property',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->actingAs($this->branchUser, 'web');
+
+        $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->getJson('/api/v1/dashboard/metrics')
+            ->assertOk()
+            ->assertJsonPath('data.total_owners', 1)
+            ->assertJsonPath('data.total_tenants', 1)
+            ->assertJsonPath('data.total_properties', 1)
+            ->assertJsonPath('data.total_owner_agreements', 0)
+            ->assertJsonPath('data.total_tenant_agreements', 0);
+    }
+
+    public function test_super_admin_can_read_administration_users_and_roles(): void
+    {
+        $email = 'administration-'.Str::uuid().'@example.com';
+        $superAdmin = User::query()->create([
+            'name' => 'Administration Admin',
+            'email' => $email,
+            'password' => Hash::make('password'),
+        ]);
+        DB::table('users')->where('id', $superAdmin->getKey())->update(['status' => 'active']);
+        DB::table('user_global_roles')->insert([
+            'user_id' => $superAdmin->getKey(),
+            'role_id' => DB::table('roles')->where('key', 'super_admin')->value('id'),
+            'created_at' => now(),
+        ]);
+        $superAdmin->refresh();
+
+        $this->actingAs($superAdmin, 'web');
+
+        $this->getJson('/api/v1/admin/users')
+            ->assertOk()
+            ->assertJsonFragment(['email' => $email]);
+        $this->getJson('/api/v1/admin/roles')
+            ->assertOk()
+            ->assertJsonFragment(['name' => 'super_admin']);
     }
 
     public function test_login_rate_limit_returns_standard_json_error(): void

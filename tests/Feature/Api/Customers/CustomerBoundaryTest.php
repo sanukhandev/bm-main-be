@@ -44,4 +44,21 @@ class CustomerBoundaryTest extends TestCase
             'customer_type' => 'invalid',
         ])->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
     }
+
+    public function test_customer_roles_are_saved_and_returned(): void
+    {
+        $customer = $this->branchRequest()->postJson('/api/v1/customers', [
+            'customer_code' => 'A-003',
+            'customer_type' => 'individual',
+            'display_name' => 'Owner Tenant',
+            'roles' => ['owner', 'tenant'],
+        ])->assertCreated()->json('data');
+
+        $this->assertSame(['owner', 'tenant'], $customer['roles']);
+        $this->assertDatabaseHas('customer_role_assignments', [
+            'branch_id' => $this->branchA,
+            'customer_id' => $customer['id'],
+            'role' => 'owner',
+        ]);
+    }
 }
