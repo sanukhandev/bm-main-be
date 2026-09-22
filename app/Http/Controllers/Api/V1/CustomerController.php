@@ -70,4 +70,12 @@ class CustomerController extends Controller
 
         return new CustomerResource($customer->refresh()->load('businessRoles'));
     }
+
+    public function destroy(Customer $customer)
+    {
+        Gate::authorize('delete', $customer);
+        $customer->forceFill(['status' => 'archived'])->save();
+
+        return response()->noContent();
+    }
 }

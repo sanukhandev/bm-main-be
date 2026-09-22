@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Support\Branch\BranchContext;
+use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Customer extends Model
 {
+    use BelongsToBranch;
     use HasFactory;
 
     protected $fillable = [
@@ -50,14 +51,5 @@ class Customer extends Model
     public function scopeForBranch(Builder $query, int $branchId): Builder
     {
         return $query->where($query->getModel()->qualifyColumn('branch_id'), $branchId);
-    }
-
-    public function resolveRouteBindingQuery($query, $value, $field = null)
-    {
-        $field ??= $this->getRouteKeyName();
-
-        return $query
-            ->where($this->qualifyColumn($field), $value)
-            ->where($this->qualifyColumn('branch_id'), app(BranchContext::class)->id());
     }
 }
