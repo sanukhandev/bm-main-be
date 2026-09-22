@@ -34,6 +34,12 @@ class PostAgreementPayment
             $installments = DB::table($installmentTable)->where('branch_id', $branch->id)->where($installmentKey, $agreementId)->whereIn('status', ['pending', 'partially_paid'])
                 ->when($data['installment_id'] ?? null, fn ($query, $installmentId) => $query->where('id', $installmentId))
                 ->orderBy('installment_no')->lockForUpdate()->get();
+            if ($installments->isEmpty() && ! empty($data['installment_id'])) {
+                $exists = DB::table($installmentTable)->where('branch_id', $branch->id)->where($installmentKey, $agreementId)->where('id', $data['installment_id'])->exists();
+                if ($exists) {
+                    throw new ApiException('PAYMENT_ALREADY_POSTED', 'This installment has no outstanding balance.', 422);
+                }
+            }
             $amountCents = $this->cents((string) $data['amount']);
             $outstandingCents = $installments->sum(fn ($row) => $this->cents((string) $row->amount) - $this->cents((string) $row->paid_amount));
             if ($amountCents < 1) {

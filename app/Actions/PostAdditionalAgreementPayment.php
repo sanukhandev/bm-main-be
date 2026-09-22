@@ -1,0 +1,66 @@
+<?php
+
+namespace App\Actions;
+
+use App\Exceptions\ApiException;
+use App\Models\AccountTransaction;
+use App\Models\AgreementAdditionalPayment;
+use App\Models\Branch;
+use App\Services\DocumentNumberGenerator;
+use Illuminate\Support\Facades\DB;
+
+class PostAdditionalAgreementPayment
+{
+    public function __construct(private readonly DocumentNumberGenerator $numbers) {}
+
+    public function execute(string $type, int $agreementId, AgreementAdditionalPayment $line, Branch $branch, int $userId, ?string $idempotencyKey): AccountTransaction
+    {
+        return DB::transaction(function () use ($type, $agreementId, $line, $branch, $userId, $idempotencyKey) {
+            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first())) {
+                return $existing->load('party');
+            }
+
+            $lockedLine = AgreementAdditionalPayment::query()->where('branch_id', $branch->id)->where('id', $line->id)->lockForUpdate()->firstOrFail();
+            if ($lockedLine->status === 'paid') {
+                throw new ApiException('PAYMENT_ALREADY_POSTED', 'This additional payment has already been posted.', 422);
+            }
+            $agreementTable = $type === 'owner' ? 'owner_agreements' : 'tenant_agreements';
+            $agreementStatus = DB::table($agreementTable)->where('branch_id', $branch->id)->where('id', $agreementId)->value('status');
+            if (! in_array($agreementStatus, ['approved', 'commenced'], true)) {
+                throw new ApiException('AGREEMENT_NOT_PAYABLE', 'The agreement is not payable.', 422);
+            }
+
+            $direction = $lockedLine->direction;
+            $transaction = AccountTransaction::query()->create([
+                'branch_id' => $branch->id,
+                'document_no' => $this->numbers->next($branch, $direction === 'inward' ? 'INWARD_RECEIPT' : 'OUTWARD_RECEIPT', (int) now()->format('Y')),
+                'direction' => $direction,
+                'transaction_date' => now()->toDateString(),
+                'payment_mode' => $lockedLine->payment_mode,
+                'amount' => $lockedLine->amount,
+                'party_customer_id' => $this->partyId($type, $agreementId, $branch),
+                'source_type' => "{$type}_agreement_additional_payment",
+                'source_id' => $lockedLine->id,
+                'remarks' => $lockedLine->particulars.' | '.$lockedLine->category,
+                'status' => 'posted',
+                'created_by' => $userId,
+                'posted_by' => $userId,
+                'posted_at' => now(),
+                'idempotency_key' => $idempotencyKey,
+            ]);
+
+            $lockedLine->forceFill(['status' => 'paid'])->save();
+            DB::table('audit_logs')->insert(['branch_id' => $branch->id, 'user_id' => $userId, 'action' => 'additional_payment_posted', 'entity_type' => 'account_transaction', 'entity_id' => $transaction->id, 'metadata_json' => json_encode(['direction' => $direction, 'amount' => $transaction->amount, 'agreement_id' => $agreementId, 'additional_payment_id' => $lockedLine->id]), 'created_at' => now(), 'updated_at' => now()]);
+
+            return $transaction->load('party');
+        });
+    }
+
+    private function partyId(string $type, int $agreementId, Branch $branch): int
+    {
+        $table = $type === 'owner' ? 'owner_agreements' : 'tenant_agreements';
+        $column = $type === 'owner' ? 'owner_customer_id' : 'tenant_customer_id';
+
+        return (int) DB::table($table)->where('branch_id', $branch->id)->where('id', $agreementId)->value($column);
+    }
+}

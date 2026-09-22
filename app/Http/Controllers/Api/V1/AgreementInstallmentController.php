@@ -34,6 +34,9 @@ class AgreementInstallmentController extends Controller
             if (! $installment) {
                 throw new ApiException('INSTALLMENT_NOT_FOUND', 'Installment not found in the active branch.', 404);
             }
+            if ((float) $installment->amount <= (float) $installment->paid_amount || $installment->status === 'paid') {
+                throw new ApiException('PAYMENT_ALREADY_POSTED', 'This installment has already been paid.', 422);
+            }
 
             $transaction = app(PostAgreementPayment::class)->execute($type, $agreementId, $context->branch(), [
                 'installment_id' => $installmentId,

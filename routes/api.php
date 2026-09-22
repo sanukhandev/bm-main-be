@@ -46,6 +46,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/{type}-agreements/{agreement}/disputes', [AgreementOperationsController::class, 'disputes'])->where('type', 'owner|tenant');
         Route::post('/agreement-disputes/{dispute}/comments', [AgreementOperationsController::class, 'comment']);
         Route::post('/{type}-agreements/{agreement}/additional-payments', [AgreementOperationsController::class, 'additionalPayment'])->where('type', 'owner|tenant');
+        Route::patch('/{type}-agreements/{agreement}/additional-payments/{payment}/status', [AgreementOperationsController::class, 'additionalPaymentStatus'])->where('type', 'owner|tenant');
         Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('properties', PropertyController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('owner-agreements', OwnerAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
