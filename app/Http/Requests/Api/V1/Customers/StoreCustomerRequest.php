@@ -22,7 +22,7 @@ class StoreCustomerRequest extends FormRequest
     {
         return [
             'customer_code' => [
-                'required', 'string', 'max:64',
+                'sometimes', 'nullable', 'string', 'max:64',
                 Rule::unique('customers', 'customer_code')->where(fn ($query) => $query->where('branch_id', app(BranchContext::class)->id())),
             ],
             'customer_type' => ['required', Rule::in(['individual', 'organization'])],

@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AccountsController;
 use App\Http\Controllers\Api\V1\AdministrationController;
+use App\Http\Controllers\Api\V1\AgreementPaymentController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DashboardController;
@@ -27,6 +29,15 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware(['auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
         Route::get('/dashboard/metrics', [DashboardController::class, 'metrics']);
+        Route::get('/accounts/dashboard', [AccountsController::class, 'dashboard']);
+        Route::get('/accounts/inward', [AccountsController::class, 'inward']);
+        Route::get('/accounts/outward', [AccountsController::class, 'outward']);
+        Route::get('/accounts/petty-cash/daybook', [AccountsController::class, 'pettyDaybook']);
+        Route::get('/accounts/reports/daily-movement', [AccountsController::class, 'dailyMovement']);
+        Route::get('/accounts/reports/payment-modes', [AccountsController::class, 'paymentModes']);
+        Route::post('/accounts/petty-cash', [AccountsController::class, 'pettyCash']);
+        Route::post('/tenant-agreements/{tenantAgreement}/payments', [AgreementPaymentController::class, 'tenant']);
+        Route::post('/owner-agreements/{ownerAgreement}/payments', [AgreementPaymentController::class, 'owner']);
         Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('properties', PropertyController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('owner-agreements', OwnerAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);

@@ -11,6 +11,8 @@ use App\Http\Requests\Api\V1\Agreements\UpdateTenantAgreementRequest;
 use App\Http\Resources\Api\V1\TenantAgreementResource;
 use App\Models\CustomerRoleAssignment;
 use App\Models\TenantAgreement;
+use App\Services\AgreementScheduleService;
+use App\Services\DocumentNumberGenerator;
 use App\Support\Branch\BranchContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -28,16 +30,17 @@ class TenantAgreementController extends Controller
         return TenantAgreementResource::collection($query->paginate($filters['per_page'] ?? 25));
     }
 
-    public function store(StoreTenantAgreementRequest $request, BranchContext $branchContext): TenantAgreementResource
+    public function store(StoreTenantAgreementRequest $request, BranchContext $branchContext, DocumentNumberGenerator $numbers, AgreementScheduleService $schedules): TenantAgreementResource
     {
         Gate::authorize('create', TenantAgreement::class);
         $data = $request->validated();
         $this->ensureTenantRole($branchContext->id(), $data['tenant_customer_id']);
         $this->ensureCoverage($branchContext->id(), $data['properties']);
 
-        $agreement = DB::transaction(function () use ($data, $branchContext) {
+        $agreement = DB::transaction(function () use ($data, $branchContext, $numbers, $schedules) {
             $properties = $data['properties'];
             unset($data['properties']);
+            $data['agreement_no'] ??= $numbers->next($branchContext->branch(), 'TENANT_AGREEMENT', (int) date('Y', strtotime($data['start_date'])));
             $agreement = new TenantAgreement($data);
             $agreement->forceFill(['branch_id' => $branchContext->id(), 'status' => 'draft'])->save();
             foreach ($properties as $property) {
@@ -46,6 +49,7 @@ class TenantAgreementController extends Controller
                     'source_owner_agreement_id' => $property['source_owner_agreement_id'],
                 ]);
             }
+            $schedules->create('tenant', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode);
 
             return $agreement;
         });
