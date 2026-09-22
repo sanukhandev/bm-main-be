@@ -43,9 +43,13 @@ class PostAgreementPayment
                 throw new ApiException('PAYMENT_EXCEEDS_OUTSTANDING', 'Payment exceeds the outstanding agreement balance.', 422);
             }
 
-            $direction = $type === 'owner' ? 'outward' : 'inward';
-            $documentType = $type === 'owner' ? 'OUTWARD_RECEIPT' : 'INWARD_RECEIPT';
-            $partyId = $type === 'owner' ? $agreement->owner_customer_id : $agreement->tenant_customer_id;
+            $direction = match ($type) {
+                'tenant' => 'inward',
+                'owner' => 'outward',
+                default => throw new ApiException('INVALID_AGREEMENT_TYPE', 'Unsupported agreement payment type.', 422),
+            };
+            $documentType = $direction === 'outward' ? 'OUTWARD_RECEIPT' : 'INWARD_RECEIPT';
+            $partyId = $direction === 'outward' ? $agreement->owner_customer_id : $agreement->tenant_customer_id;
             $paymentSequence = ((int) DB::table('account_transactions')->where('branch_id', $branch->id)->where('source_type', "{$type}_agreement")->where('source_id', $agreementId)->lockForUpdate()->max('payment_sequence')) + 1;
             $transaction = AccountTransaction::query()->create([
                 'branch_id' => $branch->id,
