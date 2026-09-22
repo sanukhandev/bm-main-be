@@ -20,6 +20,11 @@ class TenantAgreementResource extends JsonResource
                 'source_owner_agreement_id' => $property->pivot->source_owner_agreement_id,
                 'property' => new PropertyResource($property),
             ])->values()),
+            'installments' => $this->whenLoaded('installments', fn () => $this->installments->map(fn ($installment) => [
+                'id' => $installment->id, 'installment_no' => $installment->installment_no, 'due_date' => $installment->due_date?->format('Y-m-d'),
+                'amount' => $installment->amount, 'paid_amount' => $installment->paid_amount, 'balance' => number_format((float) $installment->amount - (float) $installment->paid_amount, 2, '.', ''),
+                'payment_mode' => $installment->payment_mode, 'status' => $installment->status, 'notes' => $installment->notes,
+            ])->values()),
             'start_date' => $this->start_date?->format('Y-m-d'),
             'end_date' => $this->end_date?->format('Y-m-d'),
             'total_amount' => $this->total_amount,

@@ -26,6 +26,16 @@ class AccountsController extends Controller
         $todayOutward = $sum($today, $today, 'outward');
         $monthInward = $sum($monthStart, $today, 'inward');
         $monthOutward = $sum($monthStart, $today, 'outward');
+        $recentTransactions = (clone $base)->with('party')->latest('transaction_date')->latest('id')->limit(5)->get()->map(fn ($transaction) => [
+            'id' => $transaction->id,
+            'document_no' => $transaction->document_no,
+            'direction' => $transaction->direction->value,
+            'transaction_date' => $transaction->transaction_date->format('Y-m-d'),
+            'payment_mode' => $transaction->payment_mode->value,
+            'amount' => $transaction->amount,
+            'status' => $transaction->status->value,
+            'party' => $transaction->party?->display_name,
+        ]);
 
         return [
             'data' => [
@@ -40,6 +50,7 @@ class AccountsController extends Controller
                 'owner_outstanding_payable' => $outstanding('owner_agreement_installments'),
                 'pending_cheque_inward' => (clone $base)->where('direction', 'inward')->where('payment_mode', 'cheque')->sum('amount'),
                 'pending_cheque_outward' => (clone $base)->where('direction', 'outward')->where('payment_mode', 'cheque')->sum('amount'),
+                'recent_transactions' => $recentTransactions,
             ],
         ];
     }

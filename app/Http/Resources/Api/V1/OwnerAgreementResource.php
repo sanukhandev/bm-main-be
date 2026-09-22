@@ -16,6 +16,11 @@ class OwnerAgreementResource extends JsonResource
             'owner_customer_id' => $this->owner_customer_id,
             'owner' => new CustomerResource($this->whenLoaded('owner')),
             'properties' => PropertyResource::collection($this->whenLoaded('properties')),
+            'installments' => $this->whenLoaded('installments', fn () => $this->installments->map(fn ($installment) => [
+                'id' => $installment->id, 'installment_no' => $installment->installment_no, 'due_date' => $installment->due_date?->format('Y-m-d'),
+                'amount' => $installment->amount, 'paid_amount' => $installment->paid_amount, 'balance' => number_format((float) $installment->amount - (float) $installment->paid_amount, 2, '.', ''),
+                'payment_mode' => $installment->payment_mode, 'status' => $installment->status, 'notes' => $installment->notes,
+            ])->values()),
             'start_date' => $this->start_date?->format('Y-m-d'),
             'end_date' => $this->end_date?->format('Y-m-d'),
             'total_amount' => $this->total_amount,

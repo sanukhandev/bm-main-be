@@ -15,6 +15,7 @@ class PostAgreementPaymentRequest extends FormRequest
     {
         return [
             'amount' => ['required', 'numeric', 'min:0.01'],
+            'installment_id' => ['nullable', 'integer', 'min:1'],
             'payment_mode' => ['required', 'in:cash,cheque,bank_transfer'],
             'payment_date' => ['required', 'date_format:Y-m-d'],
             'remarks' => ['nullable', 'string', 'max:2000'],
