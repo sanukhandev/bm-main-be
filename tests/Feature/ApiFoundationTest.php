@@ -262,23 +262,27 @@ class ApiFoundationTest extends TestCase
             ->deleteJson('/api/v1/properties/'.$property['id'])
             ->assertNoContent();
         $this->assertDatabaseHas('properties', ['id' => $property['id'], 'status' => 'archived']);
+        $this->assertNotNull(DB::table('properties')->where('id', $property['id'])->value('deleted_at'));
 
         $this->withHeader('X-Branch-Id', (string) $this->branchA)
             ->deleteJson('/api/v1/owner-agreements/'.$ownerAgreement['id'], ['reason' => 'Owner record closed'])
             ->assertOk()
             ->assertJsonPath('data.status', 'terminated');
         $this->assertDatabaseHas('owner_agreements', ['id' => $ownerAgreement['id'], 'status' => 'terminated']);
+        $this->assertNotNull(DB::table('owner_agreements')->where('id', $ownerAgreement['id'])->value('deleted_at'));
 
         $this->withHeader('X-Branch-Id', (string) $this->branchA)
             ->deleteJson('/api/v1/tenant-agreements/'.$tenantAgreement->json('data.id'), ['reason' => 'Tenant record closed'])
             ->assertOk()
             ->assertJsonPath('data.status', 'terminated');
         $this->assertDatabaseHas('tenant_agreements', ['id' => $tenantAgreement->json('data.id'), 'status' => 'terminated']);
+        $this->assertNotNull(DB::table('tenant_agreements')->where('id', $tenantAgreement->json('data.id'))->value('deleted_at'));
 
         $this->withHeader('X-Branch-Id', (string) $this->branchA)
             ->deleteJson('/api/v1/customers/'.$this->customerA)
             ->assertNoContent();
         $this->assertDatabaseHas('customers', ['id' => $this->customerA, 'status' => 'archived']);
+        $this->assertNotNull(DB::table('customers')->where('id', $this->customerA)->value('deleted_at'));
     }
 
     private function customer(int $branchId, string $code): int

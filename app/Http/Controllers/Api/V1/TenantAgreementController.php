@@ -105,6 +105,7 @@ class TenantAgreementController extends Controller
                 'terminated_by_user_id' => $request->user()->getAuthIdentifier(),
                 'termination_reason' => $request->validated()['reason'] ?? 'Terminated through API.',
             ])->save();
+            $tenantAgreement->delete();
             $tenantAgreement->statusHistory()->create([
                 'branch_id' => $tenantAgreement->branch_id,
                 'from_status' => $fromStatus,
