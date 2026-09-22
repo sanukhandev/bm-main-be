@@ -75,6 +75,7 @@ class CustomerController extends Controller
     {
         Gate::authorize('delete', $customer);
         $customer->forceFill(['status' => 'archived'])->save();
+        $customer->delete();
 
         return response()->noContent();
     }

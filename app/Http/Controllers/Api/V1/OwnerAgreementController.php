@@ -101,6 +101,7 @@ class OwnerAgreementController extends Controller
                 'terminated_by_user_id' => $request->user()->getAuthIdentifier(),
                 'termination_reason' => $request->validated()['reason'] ?? 'Terminated through API.',
             ])->save();
+            $ownerAgreement->delete();
             $ownerAgreement->statusHistory()->create([
                 'branch_id' => $ownerAgreement->branch_id,
                 'from_status' => $fromStatus,

@@ -70,6 +70,7 @@ class PropertyController extends Controller
     {
         Gate::authorize('delete', $property);
         $property->forceFill(['status' => 'archived'])->save();
+        $property->delete();
 
         return response()->noContent();
     }

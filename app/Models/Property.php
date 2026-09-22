@@ -7,10 +7,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Property extends Model
 {
-    use BelongsToBranch, HasFactory;
+    use BelongsToBranch, HasFactory, SoftDeletes;
 
     protected $fillable = [
         'owner_customer_id',
