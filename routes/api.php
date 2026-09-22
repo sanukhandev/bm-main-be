@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\AccountsController;
 use App\Http\Controllers\Api\V1\AdministrationController;
+use App\Http\Controllers\Api\V1\AgreementInstallmentController;
 use App\Http\Controllers\Api\V1\AgreementPaymentController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\CustomerController;
@@ -38,6 +39,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/accounts/petty-cash', [AccountsController::class, 'pettyCash']);
         Route::post('/tenant-agreements/{tenantAgreement}/payments', [AgreementPaymentController::class, 'tenant']);
         Route::post('/owner-agreements/{ownerAgreement}/payments', [AgreementPaymentController::class, 'owner']);
+        Route::patch('/owner-agreements/{agreement}/installments/{installment}/status', [AgreementInstallmentController::class, 'updateOwner']);
+        Route::patch('/tenant-agreements/{agreement}/installments/{installment}/status', [AgreementInstallmentController::class, 'updateTenant']);
         Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('properties', PropertyController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('owner-agreements', OwnerAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);

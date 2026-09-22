@@ -31,7 +31,9 @@ class PostAgreementPayment
 
             $installmentTable = $type === 'owner' ? 'owner_agreement_installments' : 'tenant_agreement_installments';
             $installmentKey = $type === 'owner' ? 'owner_agreement_id' : 'tenant_agreement_id';
-            $installments = DB::table($installmentTable)->where('branch_id', $branch->id)->where($installmentKey, $agreementId)->whereIn('status', ['pending', 'partially_paid'])->orderBy('installment_no')->lockForUpdate()->get();
+            $installments = DB::table($installmentTable)->where('branch_id', $branch->id)->where($installmentKey, $agreementId)->whereIn('status', ['pending', 'partially_paid'])
+                ->when($data['installment_id'] ?? null, fn ($query, $installmentId) => $query->where('id', $installmentId))
+                ->orderBy('installment_no')->lockForUpdate()->get();
             $amountCents = $this->cents((string) $data['amount']);
             $outstandingCents = $installments->sum(fn ($row) => $this->cents((string) $row->amount) - $this->cents((string) $row->paid_amount));
             if ($amountCents < 1) {
