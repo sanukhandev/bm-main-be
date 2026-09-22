@@ -20,11 +20,20 @@ class TenantAgreementResource extends JsonResource
                 'source_owner_agreement_id' => $property->pivot->source_owner_agreement_id,
                 'property' => new PropertyResource($property),
             ])->values()),
-            'installments' => $this->whenLoaded('installments', fn () => $this->installments->map(fn ($installment) => [
-                'id' => $installment->id, 'installment_no' => $installment->installment_no, 'due_date' => $installment->due_date?->format('Y-m-d'),
-                'amount' => $installment->amount, 'paid_amount' => $installment->paid_amount, 'balance' => number_format((float) $installment->amount - (float) $installment->paid_amount, 2, '.', ''),
-                'payment_mode' => $installment->payment_mode, 'status' => $installment->status, 'notes' => $installment->notes,
-            ])->values()),
+            'installments' => $this->whenLoaded('installments', function () {
+                $rows = $this->installments->map(fn ($installment) => [
+                    'id' => $installment->id, 'installment_no' => $installment->installment_no, 'due_date' => $installment->due_date?->format('Y-m-d'),
+                    'amount' => $installment->amount, 'paid_amount' => $installment->paid_amount, 'balance' => number_format((float) $installment->amount - (float) $installment->paid_amount, 2, '.', ''),
+                    'payment_mode' => $installment->payment_mode, 'direction' => 'inward', 'status' => $installment->status, 'notes' => $installment->notes, 'is_extra' => false,
+                ]);
+
+                return $this->resource->relationLoaded('additionalPayments')
+                    ? $rows->concat($this->additionalPayments->map(fn ($line) => [
+                        'id' => $line->id, 'installment_no' => 'extra-'.$line->id, 'due_date' => $line->due_date?->format('Y-m-d'), 'amount' => $line->amount, 'paid_amount' => '0.00', 'balance' => $line->amount,
+                        'payment_mode' => $line->payment_mode, 'direction' => $line->direction, 'status' => $line->status, 'notes' => $line->particulars.' | '.$line->category, 'is_extra' => true,
+                    ]))->values()
+                    : $rows;
+            }),
             'disputes' => $this->whenLoaded('disputes'),
             'additional_payments' => $this->whenLoaded('additionalPayments'),
             'start_date' => $this->start_date?->format('Y-m-d'),
