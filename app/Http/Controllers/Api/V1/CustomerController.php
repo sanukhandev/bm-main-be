@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\Customers\StoreCustomerRequest;
 use App\Http\Requests\Api\V1\Customers\UpdateCustomerRequest;
 use App\Http\Resources\Api\V1\CustomerResource;
 use App\Models\Customer;
+use App\Services\DocumentNumberGenerator;
 use App\Support\Branch\BranchContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -36,6 +37,7 @@ class CustomerController extends Controller
 
         $query->when($filters['status'] ?? null, fn ($query, $status) => $query->where('status', $status));
         $query->when($filters['customer_type'] ?? null, fn ($query, $type) => $query->where('customer_type', $type));
+        $query->when($filters['role'] ?? null, fn ($query, $role) => $query->whereHas('businessRoles', fn ($roles) => $roles->where('role', $role)));
 
         $sort = $filters['sort'] ?? '-created_at';
         $direction = Str::startsWith($sort, '-') ? 'desc' : 'asc';
@@ -44,13 +46,14 @@ class CustomerController extends Controller
         return CustomerResource::collection($query->paginate($filters['per_page'] ?? 25));
     }
 
-    public function store(StoreCustomerRequest $request, BranchContext $branchContext): CustomerResource
+    public function store(StoreCustomerRequest $request, BranchContext $branchContext, DocumentNumberGenerator $numbers): CustomerResource
     {
         Gate::authorize('create', Customer::class);
 
         $data = $request->validated();
         $roles = $data['roles'] ?? [];
         unset($data['roles']);
+        $data['customer_code'] ??= $numbers->next($branchContext->branch(), in_array('owner', $roles, true) ? 'OWNER_CUSTOMER' : 'TENANT_CUSTOMER', (int) now()->format('Y'));
         $customer = DB::transaction(function () use ($data, $roles, $branchContext): Customer {
             $customer = new Customer($data);
             $customer->forceFill([

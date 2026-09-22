@@ -11,6 +11,8 @@ use App\Http\Requests\Api\V1\Agreements\UpdateOwnerAgreementRequest;
 use App\Http\Resources\Api\V1\OwnerAgreementResource;
 use App\Models\CustomerRoleAssignment;
 use App\Models\OwnerAgreement;
+use App\Services\AgreementScheduleService;
+use App\Services\DocumentNumberGenerator;
 use App\Support\Branch\BranchContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -28,22 +30,24 @@ class OwnerAgreementController extends Controller
         return OwnerAgreementResource::collection($query->paginate($filters['per_page'] ?? 25));
     }
 
-    public function store(StoreOwnerAgreementRequest $request, BranchContext $branchContext): OwnerAgreementResource
+    public function store(StoreOwnerAgreementRequest $request, BranchContext $branchContext, DocumentNumberGenerator $numbers, AgreementScheduleService $schedules): OwnerAgreementResource
     {
         Gate::authorize('create', OwnerAgreement::class);
         $data = $request->validated();
         $this->ensureRole($branchContext->id(), $data['owner_customer_id'], 'owner', 'OWNER_ROLE_REQUIRED');
         $this->ensurePropertiesBelongToOwner($branchContext->id(), $data['property_ids'], $data['owner_customer_id']);
 
-        $agreement = DB::transaction(function () use ($data, $branchContext) {
+        $agreement = DB::transaction(function () use ($data, $branchContext, $numbers, $schedules) {
             $propertyIds = $data['property_ids'];
             unset($data['property_ids']);
+            $data['agreement_no'] ??= $numbers->next($branchContext->branch(), 'OWNER_AGREEMENT', (int) date('Y', strtotime($data['start_date'])));
             $agreement = new OwnerAgreement($data);
             $agreement->forceFill(['branch_id' => $branchContext->id(), 'status' => 'draft'])->save();
             $agreement->properties()->attach($propertyIds, [
                 'branch_id' => $branchContext->id(),
                 'owner_customer_id' => $agreement->owner_customer_id,
             ]);
+            $schedules->create('owner', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode);
 
             return $agreement;
         });

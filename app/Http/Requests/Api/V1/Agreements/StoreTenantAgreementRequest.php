@@ -18,7 +18,7 @@ class StoreTenantAgreementRequest extends FormRequest
         $branchId = app(BranchContext::class)->id();
 
         return [
-            'agreement_no' => ['required', 'string', 'max:64', Rule::unique('tenant_agreements', 'agreement_no')->where(fn ($query) => $query->where('branch_id', $branchId))],
+            'agreement_no' => ['sometimes', 'nullable', 'string', 'max:64', Rule::unique('tenant_agreements', 'agreement_no')->where(fn ($query) => $query->where('branch_id', $branchId))],
             'tenant_customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where(fn ($query) => $query->where('branch_id', $branchId)->where('status', 'active'))],
             'properties' => ['required', 'array', 'min:1'],
             'properties.*.property_id' => ['required', 'integer', 'distinct', Rule::exists('properties', 'id')->where(fn ($query) => $query->where('branch_id', $branchId)->where('status', 'active'))],
