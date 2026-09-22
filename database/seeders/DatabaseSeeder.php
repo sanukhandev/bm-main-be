@@ -18,6 +18,7 @@ class DatabaseSeeder extends Seeder
             RoleSeeder::class,
             DemoDataSeeder::class,
             MaintenanceSeeder::class,
+            BillingSeeder::class,
         ]);
     }
 }

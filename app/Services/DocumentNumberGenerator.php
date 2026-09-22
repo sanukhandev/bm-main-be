@@ -37,6 +37,8 @@ class DocumentNumberGenerator
             'OUTWARD_RECEIPT' => 'OR',
             'PETTY_CASH' => 'PC',
             'WORK_ORDER' => 'WO',
+            'QUOTATION' => 'QT',
+            'INVOICE' => 'INV',
             default => throw new \InvalidArgumentException("Unknown document type: {$documentType}"),
         };
 
