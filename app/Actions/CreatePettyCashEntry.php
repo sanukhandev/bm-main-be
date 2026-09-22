@@ -22,7 +22,7 @@ class CreatePettyCashEntry
                 'payment_mode' => 'cash',
                 'amount' => $data['amount'],
                 'source_type' => 'petty_cash',
-                'remarks' => trim($data['particulars'].($data['category'] ? ' | '.$data['category'] : '').($data['reference'] ? ' | '.$data['reference'] : '').($data['remarks'] ? ' | '.$data['remarks'] : '')),
+                'remarks' => trim($data['particulars'].(! empty($data['category']) ? ' | '.$data['category'] : '').(! empty($data['reference']) ? ' | '.$data['reference'] : '').(! empty($data['remarks']) ? ' | '.$data['remarks'] : '')),
                 'status' => 'posted',
                 'created_by' => $userId,
                 'posted_by' => $userId,

@@ -81,7 +81,10 @@ class AccountsController extends Controller
             return [...(new AccountTransactionResource($row))->resolve(), 'cash_in' => $row->direction->value === 'inward' ? $row->amount : '0.00', 'cash_out' => $row->direction->value === 'outward' ? $row->amount : '0.00', 'running_balance' => number_format($running, 2, '.', '')];
         });
 
-        return response()->json(['data' => $data, 'links' => $rows->linkCollection(), 'meta' => [...$rows->toArray()['meta'], 'opening_balance' => number_format($opening, 2, '.', ''), 'total_in' => $totalIn, 'total_out' => $totalOut, 'closing_balance' => number_format((float) $opening + (float) $totalIn - (float) $totalOut, 2, '.', '')]]);
+        $pagination = $rows->toArray();
+        unset($pagination['data']);
+
+        return response()->json(['data' => $data, 'links' => $rows->linkCollection(), 'meta' => [...$pagination, 'opening_balance' => number_format($opening, 2, '.', ''), 'total_in' => $totalIn, 'total_out' => $totalOut, 'closing_balance' => number_format((float) $opening + (float) $totalIn - (float) $totalOut, 2, '.', '')]]);
     }
 
     public function dailyMovement(Request $request, BranchContext $context)
