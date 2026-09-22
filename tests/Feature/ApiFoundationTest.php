@@ -191,6 +191,96 @@ class ApiFoundationTest extends TestCase
             ->assertJsonStructure(['message', 'code', 'request_id']);
     }
 
+    public function test_property_and_agreement_crud_uses_safe_delete(): void
+    {
+        $tenant = $this->customer($this->branchA, 'A-002');
+        $ownerRole = DB::table('roles')->where('key', 'owner')->value('id');
+        $tenantRole = DB::table('roles')->where('key', 'tenant')->value('id');
+
+        if (! $ownerRole) {
+            $ownerRole = DB::table('roles')->insertGetId([
+                'key' => 'owner', 'name' => 'Owner', 'scope' => 'branch', 'is_system' => false,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        if (! $tenantRole) {
+            $tenantRole = DB::table('roles')->insertGetId([
+                'key' => 'tenant', 'name' => 'Tenant', 'scope' => 'branch', 'is_system' => false,
+                'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+
+        DB::table('customer_role_assignments')->insert([
+            ['branch_id' => $this->branchA, 'customer_id' => $this->customerA, 'role' => 'owner', 'created_at' => now(), 'updated_at' => now()],
+            ['branch_id' => $this->branchA, 'customer_id' => $tenant, 'role' => 'tenant', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+        $this->actingAs($this->branchUser, 'web');
+
+        $property = $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->postJson('/api/v1/properties', [
+                'owner_customer_id' => $this->customerA,
+                'property_code' => 'PROP-001',
+                'property_type' => 'apartment',
+                'name' => 'Flat 101',
+            ])
+            ->assertCreated()
+            ->json('data');
+
+        $ownerAgreement = $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->postJson('/api/v1/owner-agreements', [
+                'agreement_no' => 'OA-001',
+                'owner_customer_id' => $this->customerA,
+                'property_ids' => [$property['id']],
+                'start_date' => '2026-01-01',
+                'end_date' => '2026-12-31',
+                'total_amount' => '12000.00',
+                'currency_code' => 'AED',
+                'payment_count' => 12,
+                'payment_mode' => 'bank_transfer',
+            ])
+            ->assertCreated()
+            ->json('data');
+
+        $tenantAgreement = $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->postJson('/api/v1/tenant-agreements', [
+                'agreement_no' => 'TA-001',
+                'tenant_customer_id' => $tenant,
+                'properties' => [[
+                    'property_id' => $property['id'],
+                    'source_owner_agreement_id' => $ownerAgreement['id'],
+                ]],
+                'start_date' => '2026-01-01',
+                'end_date' => '2026-12-31',
+                'total_amount' => '24000.00',
+                'currency_code' => 'AED',
+                'payment_count' => 12,
+                'payment_mode' => 'cash',
+            ])
+            ->assertCreated();
+
+        $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->deleteJson('/api/v1/properties/'.$property['id'])
+            ->assertNoContent();
+        $this->assertDatabaseHas('properties', ['id' => $property['id'], 'status' => 'archived']);
+
+        $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->deleteJson('/api/v1/owner-agreements/'.$ownerAgreement['id'], ['reason' => 'Owner record closed'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'terminated');
+        $this->assertDatabaseHas('owner_agreements', ['id' => $ownerAgreement['id'], 'status' => 'terminated']);
+
+        $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->deleteJson('/api/v1/tenant-agreements/'.$tenantAgreement->json('data.id'), ['reason' => 'Tenant record closed'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'terminated');
+        $this->assertDatabaseHas('tenant_agreements', ['id' => $tenantAgreement->json('data.id'), 'status' => 'terminated']);
+
+        $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->deleteJson('/api/v1/customers/'.$this->customerA)
+            ->assertNoContent();
+        $this->assertDatabaseHas('customers', ['id' => $this->customerA, 'status' => 'archived']);
+    }
+
     private function customer(int $branchId, string $code): int
     {
         return DB::table('customers')->insertGetId([

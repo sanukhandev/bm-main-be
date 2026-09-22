@@ -7,35 +7,31 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Customer extends Model
+class Property extends Model
 {
-    use BelongsToBranch;
-    use HasFactory;
+    use BelongsToBranch, HasFactory;
 
     protected $fillable = [
-        'customer_code',
-        'customer_type',
-        'display_name',
-        'legal_name',
-        'phone',
-        'email',
-        'tax_registration_no',
-        'identity_no',
-        'company_registration_no',
+        'owner_customer_id',
+        'property_code',
+        'unit_number',
+        'property_type',
+        'name',
+        'building_name',
         'address_line_1',
         'address_line_2',
         'city',
         'state_or_emirate',
         'country_code',
+        'area',
         'notes',
         'metadata_json',
     ];
 
     protected function casts(): array
     {
-        return ['metadata_json' => 'array'];
+        return ['area' => 'decimal:4', 'metadata_json' => 'array'];
     }
 
     public function branch(): BelongsTo
@@ -43,9 +39,9 @@ class Customer extends Model
         return $this->belongsTo(Branch::class);
     }
 
-    public function businessRoles(): HasMany
+    public function owner(): BelongsTo
     {
-        return $this->hasMany(CustomerRoleAssignment::class);
+        return $this->belongsTo(Customer::class, 'owner_customer_id');
     }
 
     public function scopeForBranch(Builder $query, int $branchId): Builder

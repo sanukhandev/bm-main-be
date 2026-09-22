@@ -28,6 +28,11 @@ class CustomerPolicy
         return $user->isActive() && $this->matchesBranch($customer);
     }
 
+    public function delete(User $user, Customer $customer): bool
+    {
+        return $user->isActive() && $this->matchesBranch($customer);
+    }
+
     private function matchesBranch(Customer $customer): bool
     {
         return app(BranchContext::class)->isResolved()

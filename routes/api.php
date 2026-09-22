@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\CustomerController;
+use App\Http\Controllers\Api\V1\OwnerAgreementController;
+use App\Http\Controllers\Api\V1\PropertyController;
+use App\Http\Controllers\Api\V1\TenantAgreementController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -16,6 +19,9 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::middleware(['auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
-        Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update']);
+        Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+        Route::apiResource('properties', PropertyController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+        Route::apiResource('owner-agreements', OwnerAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+        Route::apiResource('tenant-agreements', TenantAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
     });
 });
