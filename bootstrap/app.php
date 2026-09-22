@@ -11,6 +11,7 @@ use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
@@ -29,6 +30,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'user.active' => EnsureUserIsActive::class,
             'branch.context' => ResolveBranchContext::class,
         ]);
+        $middleware->prependToPriorityList(SubstituteBindings::class, ResolveBranchContext::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (Throwable $exception, Request $request) {
