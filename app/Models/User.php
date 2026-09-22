@@ -4,18 +4,100 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Attributes\Fillable;
-use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 
-#[Fillable(['name', 'email', 'password'])]
-#[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
+
+    protected $fillable = ['name', 'email', 'password'];
+
+    protected $hidden = ['password', 'remember_token'];
+
+    public function branches(): BelongsToMany
+    {
+        return $this->belongsToMany(Branch::class, 'branch_user')
+            ->withPivot(['status', 'is_default'])
+            ->withTimestamps();
+    }
+
+    public function globalRoles(): BelongsToMany
+    {
+        return $this->belongsToMany(Role::class, 'user_global_roles');
+    }
+
+    public function branchMemberships(): HasMany
+    {
+        return $this->hasMany(BranchUser::class, 'user_id');
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    public function isSuperAdmin(): bool
+    {
+        return $this->hasGlobalRole('super_admin');
+    }
+
+    public function hasGlobalRole(string $role): bool
+    {
+        return DB::table('user_global_roles')
+            ->join('roles', 'roles.id', '=', 'user_global_roles.role_id')
+            ->where('user_global_roles.user_id', $this->getKey())
+            ->where('roles.key', $role)
+            ->where('roles.scope', 'global')
+            ->exists();
+    }
+
+    public function hasBranchRole(int $branchId, string $role): bool
+    {
+        return DB::table('branch_user_roles')
+            ->join('branch_user', function ($join) {
+                $join->on('branch_user.branch_id', '=', 'branch_user_roles.branch_id')
+                    ->on('branch_user.user_id', '=', 'branch_user_roles.user_id');
+            })
+            ->join('roles', 'roles.id', '=', 'branch_user_roles.role_id')
+            ->where('branch_user_roles.user_id', $this->getKey())
+            ->where('branch_user_roles.branch_id', $branchId)
+            ->where('branch_user.status', 'active')
+            ->where('roles.key', $role)
+            ->where('roles.scope', 'branch')
+            ->exists();
+    }
+
+    public function belongsToBranch(int $branchId): bool
+    {
+        return DB::table('branch_user')
+            ->where('user_id', $this->getKey())
+            ->where('branch_id', $branchId)
+            ->where('status', 'active')
+            ->exists();
+    }
+
+    public function accessibleBranches(): Builder
+    {
+        $query = Branch::query()->where('status', 'active');
+
+        if (! $this->isSuperAdmin()) {
+            $query->whereIn('branches.id', function ($subquery) {
+                $subquery->select('branch_id')
+                    ->from('branch_user')
+                    ->where('user_id', $this->getKey())
+                    ->where('status', 'active');
+            });
+        }
+
+        return $query;
+    }
 
     /**
      * Get the attributes that should be cast.
