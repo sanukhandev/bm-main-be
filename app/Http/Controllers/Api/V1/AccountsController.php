@@ -35,6 +35,7 @@ class AccountsController extends Controller
             'amount' => $transaction->amount,
             'status' => $transaction->status->value,
             'party' => $transaction->party?->display_name,
+            'particulars' => $transaction->remarks,
         ]);
 
         return [
