@@ -25,7 +25,7 @@ class OwnerAgreementResource extends JsonResource
 
                 return $this->resource->relationLoaded('additionalPayments')
                     ? $rows->concat($this->additionalPayments->map(fn ($line) => [
-                        'id' => $line->id, 'installment_no' => 'extra-'.$line->id, 'due_date' => $line->due_date?->format('Y-m-d'), 'amount' => $line->amount, 'paid_amount' => '0.00', 'balance' => $line->amount,
+                        'id' => 'extra-'.$line->id, 'installment_no' => 'extra-'.$line->id, 'due_date' => $line->due_date?->format('Y-m-d'), 'amount' => $line->amount, 'paid_amount' => '0.00', 'balance' => $line->amount,
                         'payment_mode' => $line->payment_mode, 'direction' => $line->direction, 'status' => $line->status, 'notes' => $line->particulars.' | '.$line->category, 'is_extra' => true,
                     ]))->values()
                     : $rows;
