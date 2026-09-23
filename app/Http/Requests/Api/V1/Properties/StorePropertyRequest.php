@@ -20,7 +20,7 @@ class StorePropertyRequest extends FormRequest
 
         return [
             'owner_customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where(fn ($query) => $query->where('branch_id', $branchId)->where('status', 'active'))],
-            'property_code' => ['required', 'string', 'max:64', Rule::unique('properties', 'property_code')->where(fn ($query) => $query->where('branch_id', $branchId))],
+            'property_code' => ['sometimes', 'nullable', 'string', 'max:64', Rule::unique('properties', 'property_code')->where(fn ($query) => $query->where('branch_id', $branchId))],
             'unit_number' => ['nullable', 'string', 'max:100'],
             'property_type' => ['required', Rule::enum(PropertyType::class)],
             'name' => ['required', 'string', 'max:255'],

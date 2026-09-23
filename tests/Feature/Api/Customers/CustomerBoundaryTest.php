@@ -61,4 +61,18 @@ class CustomerBoundaryTest extends TestCase
             'role' => 'owner',
         ]);
     }
+
+    public function test_owner_and_tenant_codes_are_generated_when_blank(): void
+    {
+        $owner = $this->branchRequest()->postJson('/api/v1/customers', [
+            'customer_type' => 'individual', 'display_name' => 'Generated Owner', 'roles' => ['owner'],
+        ])->assertCreated()->json('data');
+        $tenant = $this->branchRequest()->postJson('/api/v1/customers', [
+            'customer_type' => 'individual', 'display_name' => 'Generated Tenant', 'roles' => ['tenant'],
+        ])->assertCreated()->json('data');
+
+        $year = now()->format('Y');
+        $this->assertSame("E2E-A-OWN-{$year}-000001", $owner['customer_code']);
+        $this->assertSame("E2E-A-TEN-{$year}-000001", $tenant['customer_code']);
+    }
 }
