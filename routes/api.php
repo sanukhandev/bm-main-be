@@ -80,6 +80,7 @@ Route::prefix('v1')->group(function () {
         Route::patch('/maintenance/work-orders/{workOrder}/payments/{payment}/status', [MaintenanceController::class, 'updateWorkOrderPaymentStatus']);
         Route::patch('/maintenance/work-orders/{workOrder}/status', [MaintenanceController::class, 'status']);
         Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+        Route::get('/properties/available', [PropertyController::class, 'available']);
         Route::apiResource('properties', PropertyController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('owner-agreements', OwnerAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('tenant-agreements', TenantAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);

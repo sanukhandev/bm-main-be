@@ -4,13 +4,16 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Properties\AvailablePropertyRequest;
 use App\Http\Requests\Api\V1\Properties\IndexPropertyRequest;
 use App\Http\Requests\Api\V1\Properties\StorePropertyRequest;
 use App\Http\Requests\Api\V1\Properties\UpdatePropertyRequest;
 use App\Http\Resources\Api\V1\PropertyResource;
 use App\Models\CustomerRoleAssignment;
 use App\Models\Property;
+use App\Services\PropertyAvailabilityService;
 use App\Support\Branch\BranchContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -37,6 +40,28 @@ class PropertyController extends Controller
         $query->orderBy(ltrim($sort, '-'), Str::startsWith($sort, '-') ? 'desc' : 'asc');
 
         return PropertyResource::collection($query->paginate($filters['per_page'] ?? 25));
+    }
+
+    public function available(AvailablePropertyRequest $request, BranchContext $branchContext, PropertyAvailabilityService $availability)
+    {
+        Gate::authorize('viewAny', Property::class);
+        $filters = $request->validated();
+        $query = $availability->availablePropertiesQuery(
+            $branchContext->id(),
+            CarbonImmutable::parse($filters['start_date']),
+            CarbonImmutable::parse($filters['end_date']),
+            $filters['source_owner_agreement_id'] ?? null,
+            $filters['exclude_tenant_agreement_id'] ?? null,
+        )->with('owner');
+
+        $query->when($filters['property_type'] ?? null, fn ($query, $value) => $query->where('property_type', $value));
+        $query->when($filters['owner_customer_id'] ?? null, fn ($query, $value) => $query->where('owner_customer_id', $value));
+        $query->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($query) => $query
+            ->where('name', 'like', "%{$value}%")
+            ->orWhere('property_code', 'like', "%{$value}%")
+            ->orWhere('unit_number', 'like', "%{$value}%")));
+
+        return PropertyResource::collection($query->orderBy('name')->paginate($filters['per_page'] ?? 25));
     }
 
     public function store(StorePropertyRequest $request, BranchContext $branchContext): PropertyResource
