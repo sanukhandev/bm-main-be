@@ -36,6 +36,7 @@ class OwnerAgreement extends Model
             'end_date' => 'date:Y-m-d',
             'total_amount' => 'decimal:2',
             'submitted_at' => 'datetime',
+            'held_at' => 'datetime',
             'approved_at' => 'datetime',
             'commenced_at' => 'datetime',
             'expired_at' => 'datetime',
@@ -73,6 +74,16 @@ class OwnerAgreement extends Model
     public function additionalPayments(): HasMany
     {
         return $this->hasMany(AgreementAdditionalPayment::class);
+    }
+
+    public function renewedFrom(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'renewed_from_agreement_id');
+    }
+
+    public function renewals(): HasMany
+    {
+        return $this->hasMany(self::class, 'renewed_from_agreement_id');
     }
 
     public function scopeForBranch(Builder $query, int $branchId): Builder

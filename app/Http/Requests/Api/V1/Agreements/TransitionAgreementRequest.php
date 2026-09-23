@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\Agreements;
 
+use App\Enums\AgreementStatus;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -14,6 +15,6 @@ class TransitionAgreementRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['status' => ['required', Rule::in(['approved', 'commenced', 'on_hold', 'terminated'])], 'reason' => ['nullable', 'string', 'max:2000']];
+        return ['status' => ['required', Rule::in(AgreementStatus::values())], 'reason' => ['nullable', 'string', 'max:2000']];
     }
 }

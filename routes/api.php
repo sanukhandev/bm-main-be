@@ -60,6 +60,8 @@ Route::prefix('v1')->group(function () {
         Route::patch('/owner-agreements/{agreement}/installments/{installment}/status', [AgreementInstallmentController::class, 'updateOwner']);
         Route::patch('/tenant-agreements/{agreement}/installments/{installment}/status', [AgreementInstallmentController::class, 'updateTenant']);
         Route::patch('/{type}-agreements/{agreement}/status', [AgreementOperationsController::class, 'transition'])->where('type', 'owner|tenant');
+        Route::post('/{type}-agreements/{agreement}/{action}', [AgreementOperationsController::class, 'lifecycle'])
+            ->where(['type' => 'owner|tenant', 'action' => 'submit|approve|commence|hold|resume|expire|terminate|cancel|extend|renew']);
         Route::post('/{type}-agreements/{agreement}/disputes', [AgreementOperationsController::class, 'disputes'])->where('type', 'owner|tenant');
         Route::post('/agreement-disputes/{dispute}/comments', [AgreementOperationsController::class, 'comment']);
         Route::post('/{type}-agreements/{agreement}/additional-payments', [AgreementOperationsController::class, 'additionalPayment'])->where('type', 'owner|tenant');

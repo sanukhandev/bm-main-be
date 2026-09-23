@@ -11,6 +11,7 @@ use App\Http\Requests\Api\V1\Agreements\UpdateTenantAgreementRequest;
 use App\Http\Resources\Api\V1\TenantAgreementResource;
 use App\Models\CustomerRoleAssignment;
 use App\Models\TenantAgreement;
+use App\Services\AgreementLifecycleService;
 use App\Services\AgreementScheduleService;
 use App\Services\DocumentNumberGenerator;
 use App\Services\PropertyAvailabilityService;
@@ -116,31 +117,11 @@ class TenantAgreementController extends Controller
         return new TenantAgreementResource($tenantAgreement->refresh()->load(['tenant', 'properties']));
     }
 
-    public function destroy(DeleteAgreementRequest $request, TenantAgreement $tenantAgreement): TenantAgreementResource
+    public function destroy(DeleteAgreementRequest $request, TenantAgreement $tenantAgreement, BranchContext $branchContext, AgreementLifecycleService $lifecycle): TenantAgreementResource
     {
         Gate::authorize('delete', $tenantAgreement);
-        if ($tenantAgreement->status === 'terminated') {
-            throw new ApiException('RESOURCE_CONFLICT', 'The agreement is already terminated.', 409);
-        }
-
-        DB::transaction(function () use ($request, $tenantAgreement) {
-            $fromStatus = $tenantAgreement->status;
-            $tenantAgreement->forceFill([
-                'status' => 'terminated',
-                'terminated_at' => now(),
-                'terminated_by_user_id' => $request->user()->getAuthIdentifier(),
-                'termination_reason' => $request->validated()['reason'] ?? 'Terminated through API.',
-            ])->save();
-            $tenantAgreement->delete();
-            $tenantAgreement->statusHistory()->create([
-                'branch_id' => $tenantAgreement->branch_id,
-                'from_status' => $fromStatus,
-                'to_status' => 'terminated',
-                'action' => 'terminated',
-                'changed_by_user_id' => $request->user()->getAuthIdentifier(),
-                'reason' => $request->validated()['reason'] ?? null,
-            ]);
-        });
+        $action = in_array($tenantAgreement->status, ['draft', 'pending_approval', 'approved'], true) ? 'cancelled' : 'terminated';
+        $tenantAgreement = $lifecycle->transition('tenant', $tenantAgreement->id, $branchContext->id(), $action, $request->validated()['reason'] ?? null, $request->user()->getAuthIdentifier());
 
         return new TenantAgreementResource($tenantAgreement->refresh()->load(['tenant', 'properties']));
     }
