@@ -203,6 +203,63 @@ class ApiFoundationTest extends TestCase
             ->assertJsonPath('data.total_tenant_agreements', 0);
     }
 
+    public function test_operational_dashboard_returns_branch_scoped_kpis_and_attention_data(): void
+    {
+        $now = now();
+        DB::table('customer_role_assignments')->insert([
+            ['branch_id' => $this->branchA, 'customer_id' => $this->customerA, 'role' => 'owner', 'created_at' => $now, 'updated_at' => $now],
+            ['branch_id' => $this->branchA, 'customer_id' => $this->customerA, 'role' => 'tenant', 'created_at' => $now, 'updated_at' => $now],
+        ]);
+        $property = DB::table('properties')->insertGetId([
+            'branch_id' => $this->branchA, 'owner_customer_id' => $this->customerA, 'property_code' => 'A-DASH-001',
+            'property_type' => 'apartment', 'name' => 'Dashboard Property', 'status' => 'active', 'created_at' => $now, 'updated_at' => $now,
+        ]);
+        $owner = DB::table('owner_agreements')->insertGetId([
+            'branch_id' => $this->branchA, 'agreement_no' => 'A-OA-001', 'owner_customer_id' => $this->customerA,
+            'start_date' => $now->toDateString(), 'end_date' => $now->copy()->addDays(10)->toDateString(), 'total_amount' => 10000,
+            'payment_count' => 1, 'payment_mode' => 'cash', 'status' => 'commenced', 'created_at' => $now, 'updated_at' => $now,
+        ]);
+        DB::table('owner_agreement_properties')->insert([
+            'branch_id' => $this->branchA, 'owner_agreement_id' => $owner, 'property_id' => $property, 'owner_customer_id' => $this->customerA,
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+        $tenant = DB::table('tenant_agreements')->insertGetId([
+            'branch_id' => $this->branchA, 'agreement_no' => 'A-TA-001', 'tenant_customer_id' => $this->customerA,
+            'start_date' => $now->toDateString(), 'end_date' => $now->copy()->addDays(10)->toDateString(), 'total_amount' => 12000,
+            'payment_count' => 1, 'payment_mode' => 'cash', 'status' => 'commenced', 'created_at' => $now, 'updated_at' => $now,
+        ]);
+        DB::table('tenant_agreement_properties')->insert([
+            'branch_id' => $this->branchA, 'tenant_agreement_id' => $tenant, 'property_id' => $property, 'source_owner_agreement_id' => $owner,
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+        $permission = DB::table('permissions')->insertGetId(['key' => 'accounts.view', 'name' => 'View accounts', 'created_at' => $now, 'updated_at' => $now]);
+        DB::table('role_permissions')->insert(['role_id' => DB::table('roles')->where('key', 'branch_admin')->value('id'), 'permission_id' => $permission]);
+
+        $this->actingAs($this->branchUser, 'web');
+        $response = $this->withHeader('X-Branch-Id', (string) $this->branchA)->getJson('/api/v1/dashboard/operational')->assertOk();
+        $response->assertJsonPath('data.summary.owners', 1)
+            ->assertJsonPath('data.summary.tenants', 1)
+            ->assertJsonPath('data.summary.properties', 1)
+            ->assertJsonPath('data.summary.owner_agreements_active', 1)
+            ->assertJsonPath('data.summary.tenant_agreements_active', 1)
+            ->assertJsonPath('data.occupancy.occupied_properties', 1)
+            ->assertJsonPath('data.occupancy.available_properties', 0)
+            ->assertJsonPath('data.agreements.owner_expiring_30_days', 1)
+            ->assertJsonPath('data.agreements.tenant_expiring_30_days', 1)
+            ->assertJsonPath('data.financial_attention.tenant_receivables', '0.00');
+
+        $this->withHeader('X-Branch-Id', (string) $this->branchB)->getJson('/api/v1/dashboard/operational')->assertNotFound();
+    }
+
+    public function test_operational_dashboard_hides_financial_attention_without_accounts_permission(): void
+    {
+        DB::table('role_permissions')->whereIn('permission_id', DB::table('permissions')->whereIn('key', ['accounts.view', 'accounts.post', 'accounts.void'])->pluck('id'))->delete();
+        $this->actingAs($this->branchUser, 'web');
+
+        $this->withHeader('X-Branch-Id', (string) $this->branchA)->getJson('/api/v1/dashboard/operational')
+            ->assertOk()->assertJsonPath('data.financial_attention', null);
+    }
+
     public function test_super_admin_can_read_administration_users_and_roles(): void
     {
         $email = 'administration-'.Str::uuid().'@example.com';

@@ -33,6 +33,7 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware(['auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
         Route::get('/dashboard/metrics', [DashboardController::class, 'metrics']);
+        Route::get('/dashboard/operational', [DashboardController::class, 'operational']);
         Route::get('/accounts/dashboard', [AccountsController::class, 'dashboard'])->middleware('permission:accounts.view');
         Route::get('/accounts/inward', [AccountsController::class, 'inward'])->middleware('permission:accounts.view');
         Route::get('/accounts/outward', [AccountsController::class, 'outward'])->middleware('permission:accounts.view');
