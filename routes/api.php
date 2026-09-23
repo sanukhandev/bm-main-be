@@ -40,6 +40,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/accounts/reports/daily-movement', [AccountsController::class, 'dailyMovement']);
         Route::get('/accounts/reports/payment-modes', [AccountsController::class, 'paymentModes']);
         Route::post('/accounts/petty-cash', [AccountsController::class, 'pettyCash']);
+        Route::post('/accounts/transactions/{transaction}/void', [AccountsController::class, 'void']);
         Route::get('/quotations', [BillingController::class, 'quotations']);
         Route::post('/quotations', [BillingController::class, 'storeQuotation']);
         Route::get('/quotations/{quotation}', [BillingController::class, 'quotation']);

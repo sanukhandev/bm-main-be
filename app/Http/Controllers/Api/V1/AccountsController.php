@@ -3,8 +3,10 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\CreatePettyCashEntry;
+use App\Actions\VoidAccountTransaction;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Accounts\CreatePettyCashRequest;
+use App\Http\Requests\Api\V1\Accounts\VoidAccountTransactionRequest;
 use App\Http\Resources\Api\V1\AccountTransactionResource;
 use App\Models\AccountTransaction;
 use App\Support\Branch\BranchContext;
@@ -69,6 +71,11 @@ class AccountsController extends Controller
     public function pettyCash(CreatePettyCashRequest $request, BranchContext $context, CreatePettyCashEntry $action): AccountTransactionResource
     {
         return new AccountTransactionResource($action->execute($context->branch(), $request->validated(), $request->user()->getAuthIdentifier()));
+    }
+
+    public function void(VoidAccountTransactionRequest $request, int $transaction, BranchContext $context, VoidAccountTransaction $action): AccountTransactionResource
+    {
+        return new AccountTransactionResource($action->execute($transaction, $context->branch(), $request->user()->getAuthIdentifier(), $request->validated('reason')));
     }
 
     public function pettyDaybook(Request $request, BranchContext $context)

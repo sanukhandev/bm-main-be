@@ -7,6 +7,7 @@ use App\Models\AccountTransaction;
 use App\Models\Branch;
 use App\Models\WorkOrderPayment;
 use App\Services\DocumentNumberGenerator;
+use App\Services\PaymentModeDetails;
 use Illuminate\Support\Facades\DB;
 
 class PostWorkOrderPayment
@@ -23,16 +24,22 @@ class PostWorkOrderPayment
             if ($line->status === 'paid') {
                 throw new ApiException('PAYMENT_ALREADY_POSTED', 'This work-order payment has already been posted.', 422);
             }
+            $details = PaymentModeDetails::normalize(['payment_mode' => $line->payment_mode, 'remarks' => $line->particulars, 'cheque_no' => $line->cheque_no, 'cheque_date' => $line->cheque_date, 'bank_name' => $line->bank_name, 'bank_reference' => $line->bank_reference, 'transfer_date' => $line->transfer_date]);
             $transaction = AccountTransaction::query()->create([
                 'branch_id' => $branch->id,
-                'document_no' => $this->numbers->next($branch, $line->direction === 'inward' ? 'INWARD_RECEIPT' : 'OUTWARD_RECEIPT', (int) now()->format('Y')),
+                'document_no' => $this->numbers->next($branch, $line->direction === 'inward' ? 'INWARD_RECEIPT' : 'OUTWARD_RECEIPT', (int) now($branch->timezone)->format('Y')),
                 'direction' => $line->direction,
                 'transaction_date' => now()->toDateString(),
-                'payment_mode' => $line->payment_mode,
+                'payment_mode' => $details['payment_mode'],
                 'amount' => $line->amount,
                 'source_type' => 'work_order_payment',
                 'source_id' => $line->id,
-                'remarks' => $line->particulars.' | '.$line->category,
+                'remarks' => $details['remarks'].' | '.$line->category,
+                'cheque_no' => $details['cheque_no'] ?? null,
+                'cheque_date' => $details['cheque_date'] ?? null,
+                'bank_name' => $details['bank_name'] ?? null,
+                'bank_reference' => $details['bank_reference'] ?? null,
+                'transfer_date' => $details['transfer_date'] ?? null,
                 'status' => 'posted',
                 'created_by' => $userId,
                 'posted_by' => $userId,

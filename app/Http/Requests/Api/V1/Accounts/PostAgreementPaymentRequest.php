@@ -2,7 +2,9 @@
 
 namespace App\Http\Requests\Api\V1\Accounts;
 
+use App\Enums\PaymentMode;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class PostAgreementPaymentRequest extends FormRequest
 {
@@ -16,7 +18,7 @@ class PostAgreementPaymentRequest extends FormRequest
         return [
             'amount' => ['required', 'numeric', 'min:0.01'],
             'installment_id' => ['nullable', 'integer', 'min:1'],
-            'payment_mode' => ['required', 'in:cash,cheque,bank_transfer'],
+            'payment_mode' => ['required', Rule::enum(PaymentMode::class)],
             'payment_date' => ['required', 'date_format:Y-m-d'],
             'remarks' => ['nullable', 'string', 'max:2000'],
             'cheque_no' => ['required_if:payment_mode,cheque', 'nullable', 'string', 'max:100'],
