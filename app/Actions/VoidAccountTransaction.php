@@ -5,6 +5,7 @@ namespace App\Actions;
 use App\Exceptions\ApiException;
 use App\Models\AccountTransaction;
 use App\Models\Branch;
+use App\Services\AuditService;
 use Illuminate\Support\Facades\DB;
 
 class VoidAccountTransaction
@@ -54,7 +55,7 @@ class VoidAccountTransaction
             DB::table('account_transactions')->where('id', $transaction->id)->update([
                 'status' => 'void', 'voided_by' => $userId, 'voided_at' => now(), 'void_reason' => $reason, 'updated_at' => now(),
             ]);
-            DB::table('audit_logs')->insert(['branch_id' => $branch->id, 'user_id' => $userId, 'action' => 'payment_voided', 'entity_type' => 'account_transaction', 'entity_id' => $transaction->id, 'metadata_json' => json_encode(['reason' => $reason]), 'created_at' => now(), 'updated_at' => now()]);
+            app(AuditService::class)->record('accounts.transaction_voided', $transaction, null, ['status' => 'void'], ['transaction_id' => $transaction->id, 'document_number' => $transaction->document_no, 'amount' => $transaction->amount, 'void_reason' => $reason], $branch->id, $userId);
 
             return $transaction->refresh();
         });

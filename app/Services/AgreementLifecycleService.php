@@ -53,8 +53,10 @@ class AgreementLifecycleService
             }
 
             $from = $agreement->status;
+            $before = ['status' => $from, 'start_date' => $agreement->start_date?->format('Y-m-d'), 'end_date' => $agreement->end_date?->format('Y-m-d')];
             $agreement->forceFill($this->transitionAttributes($to, $reason, $userId))->save();
             $this->history($type, $agreement, $from, $to, $this->actionFor($to), $reason, $userId);
+            app(AuditService::class)->record($type.'_agreement.'.$this->actionFor($to), $agreement, $before, ['status' => $agreement->status, 'start_date' => $agreement->start_date?->format('Y-m-d'), 'end_date' => $agreement->end_date?->format('Y-m-d')], ['reason' => $reason, 'actor_type' => $userId ? 'user' : 'system'], $branchId, $userId);
 
             return $agreement;
         });
@@ -99,6 +101,7 @@ class AgreementLifecycleService
             $agreement->increment('lock_version');
             $agreement->refresh();
             $this->history($type, $agreement, $from, $to, 'extend', $reason, $userId, ['old_end_date' => $oldEnd->toDateString(), 'new_end_date' => $newEnd->toDateString()]);
+            app(AuditService::class)->record($type.'_agreement.extended', $agreement, ['end_date' => $oldEnd->toDateString()], ['end_date' => $newEnd->toDateString(), 'status' => $agreement->status], ['old_end_date' => $oldEnd->toDateString(), 'new_end_date' => $newEnd->toDateString(), 'reason' => $reason], $branchId, $userId);
 
             return $agreement;
         });
@@ -137,6 +140,8 @@ class AgreementLifecycleService
             $schedules->create($type, $new->id, $branchId, $new->start_date->format('Y-m-d'), $new->payment_count, $new->total_amount, $new->payment_frequency ?: 'monthly', $new->payment_mode);
             $this->history($type, $source, $source->status, $source->status, 'renew', 'Renewed as agreement '.$new->agreement_no, $userId, ['renewed_agreement_id' => $new->id]);
             $this->history($type, $new, null, AgreementStatus::Draft->value, 'renew', null, $userId, ['renewed_from_agreement_id' => $source->id]);
+            app(AuditService::class)->record($type.'_agreement.renewed', $source, null, null, ['source_agreement_id' => $source->id, 'new_agreement_id' => $new->id, 'new_agreement_number' => $new->agreement_no], $branchId, $userId);
+            app(AuditService::class)->record($type.'_agreement.created', $new, null, ['status' => $new->status, 'agreement_no' => $new->agreement_no], ['renewed_from_agreement_id' => $source->id], $branchId, $userId);
 
             return $new;
         });

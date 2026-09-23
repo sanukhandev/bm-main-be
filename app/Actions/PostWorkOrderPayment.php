@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Models\AccountTransaction;
 use App\Models\Branch;
 use App\Models\WorkOrderPayment;
+use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use App\Services\PaymentModeDetails;
 use Illuminate\Support\Facades\DB;
@@ -47,7 +48,7 @@ class PostWorkOrderPayment
                 'idempotency_key' => $idempotencyKey,
             ]);
             $line->update(['status' => 'paid']);
-            DB::table('audit_logs')->insert(['branch_id' => $branch->id, 'user_id' => $userId, 'action' => 'work_order_payment_posted', 'entity_type' => 'account_transaction', 'entity_id' => $transaction->id, 'metadata_json' => json_encode(['work_order_payment_id' => $line->id, 'amount' => $line->amount]), 'created_at' => now(), 'updated_at' => now()]);
+            app(AuditService::class)->record('accounts.transaction_posted', $transaction, null, null, ['transaction_id' => $transaction->id, 'document_number' => $transaction->document_no, 'direction' => $transaction->direction->value, 'amount' => $transaction->amount, 'payment_mode' => $transaction->payment_mode->value, 'source_type' => $transaction->source_type, 'source_id' => $line->id], $branch->id, $userId);
 
             return $transaction->load('party');
         });

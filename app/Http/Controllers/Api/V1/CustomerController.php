@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\Customers\StoreCustomerRequest;
 use App\Http\Requests\Api\V1\Customers\UpdateCustomerRequest;
 use App\Http\Resources\Api\V1\CustomerResource;
 use App\Models\Customer;
+use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use App\Support\Branch\BranchContext;
 use Illuminate\Support\Facades\DB;
@@ -61,6 +62,7 @@ class CustomerController extends Controller
                 'status' => 'active',
             ])->save();
             $this->syncRoles($customer, $roles, $branchContext->id());
+            app(AuditService::class)->record('customer.created', $customer, null, [...$customer->only(['customer_code', 'display_name', 'customer_type', 'status']), 'roles' => $roles], [], $branchContext->id());
 
             return $customer;
         });
@@ -82,10 +84,12 @@ class CustomerController extends Controller
         $roles = $data['roles'] ?? null;
         unset($data['roles']);
         DB::transaction(function () use ($customer, $data, $roles): void {
+            $before = [...$customer->only(['customer_code', 'display_name', 'customer_type', 'status', 'phone', 'email']), 'roles' => $customer->businessRoles()->pluck('role')->values()->all()];
             $customer->update($data);
             if ($roles !== null) {
                 $this->syncRoles($customer, $roles, $customer->branch_id);
             }
+            app(AuditService::class)->record('customer.updated', $customer, $before, [...$customer->only(['customer_code', 'display_name', 'customer_type', 'status', 'phone', 'email']), 'roles' => $roles ?? $before['roles']], [], $customer->branch_id);
         });
 
         return new CustomerResource($customer->refresh()->load('businessRoles'));

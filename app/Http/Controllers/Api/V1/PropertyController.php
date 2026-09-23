@@ -13,6 +13,7 @@ use App\Http\Resources\Api\V1\PropertyResource;
 use App\Models\Branch;
 use App\Models\CustomerRoleAssignment;
 use App\Models\Property;
+use App\Services\AuditService;
 use App\Services\PropertyAvailabilityService;
 use App\Support\Branch\BranchContext;
 use Carbon\CarbonImmutable;
@@ -74,6 +75,7 @@ class PropertyController extends Controller
         $data['property_code'] ??= $this->propertyCode($branchContext->branch(), $data);
         $property = new Property($data);
         $property->forceFill(['branch_id' => $branchContext->id(), 'status' => 'active'])->save();
+        app(AuditService::class)->record('property.created', $property, null, $property->only(['owner_customer_id', 'property_code', 'unit_number', 'property_type', 'name', 'building_name', 'state_or_emirate', 'area', 'status']), [], $branchContext->id());
 
         return new PropertyResource($property->load('owner'));
     }
@@ -108,7 +110,9 @@ class PropertyController extends Controller
     {
         Gate::authorize('update', $property);
         $data = $request->validated();
+        $before = $property->only(['owner_customer_id', 'property_code', 'unit_number', 'property_type', 'name', 'building_name', 'state_or_emirate', 'area', 'status']);
         $property->update($data);
+        app(AuditService::class)->record('property.updated', $property, $before, $property->only(['owner_customer_id', 'property_code', 'unit_number', 'property_type', 'name', 'building_name', 'state_or_emirate', 'area', 'status']), [], $property->branch_id);
 
         return new PropertyResource($property->refresh()->load('owner'));
     }

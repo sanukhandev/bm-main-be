@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AdministrationController;
 use App\Http\Controllers\Api\V1\AgreementInstallmentController;
 use App\Http\Controllers\Api\V1\AgreementOperationsController;
 use App\Http\Controllers\Api\V1\AgreementPaymentController;
+use App\Http\Controllers\Api\V1\AuditLogController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\CustomerController;
@@ -35,6 +36,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
         Route::get('/dashboard/metrics', [DashboardController::class, 'metrics']);
         Route::get('/dashboard/operational', [DashboardController::class, 'operational']);
+        Route::get('/audit-logs', [AuditLogController::class, 'index'])->middleware('permission:audit.view');
         Route::get('/reports/owner-agreements', [ReportsController::class, 'ownerAgreements']);
         Route::get('/reports/tenant-agreements', [ReportsController::class, 'tenantAgreements']);
         Route::get('/reports/agreement-expiry', [ReportsController::class, 'expiry']);

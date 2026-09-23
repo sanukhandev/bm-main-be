@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Models\AccountTransaction;
 use App\Models\AccountTransactionAllocation;
 use App\Models\Branch;
+use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use App\Services\PaymentModeDetails;
 use Carbon\CarbonImmutable;
@@ -105,7 +106,7 @@ class PostAgreementPayment
                 $remaining -= $allocated;
             }
 
-            DB::table('audit_logs')->insert(['branch_id' => $branch->id, 'user_id' => $userId, 'action' => 'payment_posted', 'entity_type' => 'account_transaction', 'entity_id' => $transaction->id, 'metadata_json' => json_encode(['amount' => $transaction->amount, 'source_type' => $transaction->source_type, 'source_id' => $agreementId]), 'created_at' => now(), 'updated_at' => now()]);
+            app(AuditService::class)->record('accounts.transaction_posted', $transaction, null, null, ['transaction_id' => $transaction->id, 'document_number' => $transaction->document_no, 'direction' => $transaction->direction->value, 'amount' => $transaction->amount, 'payment_mode' => $transaction->payment_mode->value, 'source_type' => $transaction->source_type, 'source_id' => $agreementId], $branch->id, $userId);
 
             return $transaction->load('allocations', 'party');
         });
