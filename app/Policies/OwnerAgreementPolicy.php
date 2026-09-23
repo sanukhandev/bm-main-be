@@ -23,6 +23,11 @@ class OwnerAgreementPolicy
         return $user->isActive() && $this->matchesBranch($agreement);
     }
 
+    public function lifecycle(User $user, OwnerAgreement $agreement): bool
+    {
+        return $user->isActive() && $this->matchesBranch($agreement);
+    }
+
     public function update(User $user, OwnerAgreement $agreement): bool
     {
         return $user->isActive() && $this->matchesBranch($agreement) && in_array($agreement->status, ['draft', 'pending_approval'], true);

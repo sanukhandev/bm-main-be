@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Services\AgreementLifecycleService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -42,6 +43,16 @@ class OwnerAgreementResource extends JsonResource
             'terms_text' => $this->terms_text,
             'notes' => $this->notes,
             'status' => $this->status,
+            'available_actions' => app(AgreementLifecycleService::class)->availableActions('owner', $this->resource, (int) $this->branch_id),
+            'renewed_from_agreement_id' => $this->renewed_from_agreement_id,
+            'submitted_at' => $this->submitted_at?->toIso8601String(),
+            'approved_at' => $this->approved_at?->toIso8601String(),
+            'approved_by_user_id' => $this->approved_by_user_id,
+            'commenced_at' => $this->commenced_at?->toIso8601String(),
+            'held_at' => $this->held_at?->toIso8601String(),
+            'held_by_user_id' => $this->held_by_user_id,
+            'hold_reason' => $this->hold_reason,
+            'expired_at' => $this->expired_at?->toIso8601String(),
             'lock_version' => $this->lock_version,
             'terminated_at' => $this->terminated_at?->toIso8601String(),
             'termination_reason' => $this->termination_reason,

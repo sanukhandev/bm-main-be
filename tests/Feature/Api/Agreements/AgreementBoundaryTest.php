@@ -79,8 +79,8 @@ class AgreementBoundaryTest extends TestCase
         ])->assertCreated()->json('data');
 
         $this->branchRequest()->deleteJson('/api/v1/tenant-agreements/'.$tenant['id'], ['reason' => 'Closed'])
-            ->assertOk()->assertJsonPath('data.status', 'terminated');
-        $this->assertNotNull($this->app['db']->table('tenant_agreements')->where('id', $tenant['id'])->value('deleted_at'));
+            ->assertOk()->assertJsonPath('data.status', 'cancelled');
+        $this->assertNull($this->app['db']->table('tenant_agreements')->where('id', $tenant['id'])->value('deleted_at'));
     }
 
     public function test_agreement_from_another_branch_is_not_visible(): void
