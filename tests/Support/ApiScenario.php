@@ -28,7 +28,7 @@ trait ApiScenario
             ['key' => 'owner', 'name' => 'Owner', 'scope' => 'branch', 'is_system' => false, 'created_at' => $now, 'updated_at' => $now],
             ['key' => 'tenant', 'name' => 'Tenant', 'scope' => 'branch', 'is_system' => false, 'created_at' => $now, 'updated_at' => $now],
         ]);
-        foreach (['accounts.view', 'accounts.post', 'accounts.void'] as $key) {
+        foreach (['accounts.view', 'accounts.post', 'accounts.void', 'audit.view'] as $key) {
             DB::table('permissions')->insert(['key' => $key, 'name' => $key, 'created_at' => $now, 'updated_at' => $now]);
         }
         $branchRole = DB::table('roles')->where('key', 'branch_admin')->value('id');

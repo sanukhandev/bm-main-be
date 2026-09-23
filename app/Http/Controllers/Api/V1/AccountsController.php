@@ -11,6 +11,7 @@ use App\Http\Requests\Api\V1\Accounts\CreatePettyCashRequest;
 use App\Http\Requests\Api\V1\Accounts\VoidAccountTransactionRequest;
 use App\Http\Resources\Api\V1\AccountTransactionResource;
 use App\Models\AccountTransaction;
+use App\Services\AuditService;
 use App\Support\Branch\BranchContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -160,7 +161,9 @@ class AccountsController extends Controller
             throw new ApiException('INVALID_CHEQUE_STATUS_TRANSITION', 'This cheque status transition is not allowed.', 409);
         }
         $record->updateQuietly(['cheque_status' => $target->value, 'cheque_status_changed_at' => now(), 'cheque_status_changed_by' => $request->user()->getAuthIdentifier()]);
-        DB::table('audit_logs')->insert(['branch_id' => $context->id(), 'user_id' => $request->user()->getAuthIdentifier(), 'action' => 'cheque_status_changed', 'entity_type' => 'account_transaction', 'entity_id' => $record->id, 'metadata_json' => json_encode(['from' => $current->value, 'to' => $target->value]), 'created_at' => now(), 'updated_at' => now()]);
+        app(AuditService::class)->record('accounts.cheque_'.match ($target) {
+            ChequeStatus::Deposited => 'deposited', ChequeStatus::Cleared => 'cleared', ChequeStatus::Bounced => 'bounced', ChequeStatus::Cancelled => 'cancelled', default => 'changed'
+        }, $record, ['cheque_status' => $current->value], ['cheque_status' => $target->value], ['previous_cheque_status' => $current->value, 'new_cheque_status' => $target->value, 'cheque_no' => $record->cheque_no, 'transaction_id' => $record->id, 'document_number' => $record->document_no], $context->id(), $request->user()->getAuthIdentifier());
 
         return new AccountTransactionResource($record->refresh());
     }

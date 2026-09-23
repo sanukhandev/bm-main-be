@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Models\AccountTransaction;
 use App\Models\AgreementAdditionalPayment;
 use App\Models\Branch;
+use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use App\Services\PaymentModeDetails;
 use Illuminate\Support\Facades\DB;
@@ -57,7 +58,7 @@ class PostAdditionalAgreementPayment
             ]);
 
             $lockedLine->forceFill(['status' => 'paid'])->save();
-            DB::table('audit_logs')->insert(['branch_id' => $branch->id, 'user_id' => $userId, 'action' => 'additional_payment_posted', 'entity_type' => 'account_transaction', 'entity_id' => $transaction->id, 'metadata_json' => json_encode(['direction' => $direction, 'amount' => $transaction->amount, 'agreement_id' => $agreementId, 'additional_payment_id' => $lockedLine->id]), 'created_at' => now(), 'updated_at' => now()]);
+            app(AuditService::class)->record('accounts.transaction_posted', $transaction, null, null, ['transaction_id' => $transaction->id, 'document_number' => $transaction->document_no, 'direction' => $direction, 'amount' => $transaction->amount, 'payment_mode' => $transaction->payment_mode->value, 'source_type' => $transaction->source_type, 'source_id' => $lockedLine->id, 'agreement_id' => $agreementId], $branch->id, $userId);
 
             return $transaction->load('party');
         });

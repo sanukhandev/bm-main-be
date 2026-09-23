@@ -13,6 +13,7 @@ use App\Models\CustomerRoleAssignment;
 use App\Models\TenantAgreement;
 use App\Services\AgreementLifecycleService;
 use App\Services\AgreementScheduleService;
+use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use App\Services\PropertyAvailabilityService;
 use App\Support\Branch\BranchContext;
@@ -59,6 +60,14 @@ class TenantAgreementController extends Controller
                 ]);
             }
             $schedules->create('tenant', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode);
+            app(AuditService::class)->record('tenant_agreement.created', $agreement, null, [
+                'agreement_no' => $agreement->agreement_no,
+                'tenant_customer_id' => $agreement->tenant_customer_id,
+                'start_date' => $agreement->start_date?->toDateString(),
+                'end_date' => $agreement->end_date?->toDateString(),
+                'status' => $agreement->status,
+                'total_amount' => $agreement->total_amount,
+            ]);
 
             return $agreement;
         });
@@ -80,7 +89,8 @@ class TenantAgreementController extends Controller
         if (isset($data['tenant_customer_id'])) {
             $this->ensureTenantRole($branchContext->id(), $data['tenant_customer_id']);
         }
-        DB::transaction(function () use ($data, $tenantAgreement, $branchContext, $availability) {
+        $before = $tenantAgreement->only(['agreement_no', 'tenant_customer_id', 'start_date', 'end_date', 'status', 'total_amount']);
+        DB::transaction(function () use ($data, $tenantAgreement, $branchContext, $availability, $before) {
             $properties = $data['properties'] ?? null;
             $startDate = CarbonImmutable::parse($data['start_date'] ?? $tenantAgreement->start_date);
             $endDate = CarbonImmutable::parse($data['end_date'] ?? $tenantAgreement->end_date);
@@ -112,6 +122,7 @@ class TenantAgreementController extends Controller
                 }
             }
             $tenantAgreement->increment('lock_version');
+            app(AuditService::class)->record('tenant_agreement.updated', $tenantAgreement, $before, $tenantAgreement->only(['agreement_no', 'tenant_customer_id', 'start_date', 'end_date', 'status', 'total_amount']));
         });
 
         return new TenantAgreementResource($tenantAgreement->refresh()->load(['tenant', 'properties']));
