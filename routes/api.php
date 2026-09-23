@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\V1\OwnerAgreementController;
 use App\Http\Controllers\Api\V1\PropertyController;
 use App\Http\Controllers\Api\V1\ReportsController;
 use App\Http\Controllers\Api\V1\TenantAgreementController;
+use App\Http\Controllers\Api\V1\ZaakiyController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -33,9 +34,10 @@ Route::prefix('v1')->group(function () {
         Route::get('/roles', [AdministrationController::class, 'roles']);
     });
 
-    Route::middleware(['auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
+    Route::middleware(['api.json', 'auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
         Route::get('/dashboard/metrics', [DashboardController::class, 'metrics']);
         Route::get('/dashboard/operational', [DashboardController::class, 'operational']);
+        Route::post('/ai/zaakiy/chat', [ZaakiyController::class, 'chat'])->middleware('throttle:api');
         Route::get('/audit-logs', [AuditLogController::class, 'index'])->middleware('permission:audit.view');
         Route::get('/reports/owner-agreements', [ReportsController::class, 'ownerAgreements']);
         Route::get('/reports/tenant-agreements', [ReportsController::class, 'tenantAgreements']);
