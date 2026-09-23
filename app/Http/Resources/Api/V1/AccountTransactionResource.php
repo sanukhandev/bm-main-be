@@ -28,6 +28,9 @@ class AccountTransactionResource extends JsonResource
             'bank_reference' => $this->bank_reference,
             'transfer_date' => $this->transfer_date?->format('Y-m-d'),
             'status' => $this->status?->value ?? $this->status,
+            'voided_by' => $this->voided_by,
+            'voided_at' => $this->voided_at?->toIso8601String(),
+            'void_reason' => $this->void_reason,
             'posted_at' => $this->posted_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
         ];

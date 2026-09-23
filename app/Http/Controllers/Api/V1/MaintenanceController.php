@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\CreateWorkOrder;
 use App\Actions\PostWorkOrderPayment;
+use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Maintenance\StoreInventoryItemRequest;
 use App\Http\Requests\Api\V1\Maintenance\StoreVendorRequest;
@@ -21,6 +22,7 @@ use App\Models\StockMovement;
 use App\Models\Vendor;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderPayment;
+use App\Services\PaymentModeDetails;
 use App\Support\Branch\BranchContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -108,7 +110,7 @@ class MaintenanceController extends Controller
     public function storeWorkOrderPayment(StoreWorkOrderPaymentRequest $request, int $workOrder, BranchContext $context)
     {
         WorkOrder::query()->forBranch($context->id())->findOrFail($workOrder);
-        $payment = WorkOrderPayment::query()->create(['branch_id' => $context->id(), 'work_order_id' => $workOrder, 'created_by' => $request->user()->getAuthIdentifier(), ...$request->validated()]);
+        $payment = WorkOrderPayment::query()->create(['branch_id' => $context->id(), 'work_order_id' => $workOrder, 'created_by' => $request->user()->getAuthIdentifier(), ...PaymentModeDetails::normalize($request->validated())]);
 
         return new WorkOrderPaymentResource($payment);
     }
@@ -117,6 +119,9 @@ class MaintenanceController extends Controller
     {
         WorkOrder::query()->forBranch($context->id())->findOrFail($workOrder);
         $line = WorkOrderPayment::query()->where('branch_id', $context->id())->where('work_order_id', $workOrder)->findOrFail($payment);
+        if ($line->status === 'paid' && $request->validated('status') !== 'paid') {
+            throw new ApiException('FINANCIAL_RECORD_IMMUTABLE', 'Posted payment lines must be voided through their financial transaction.', 409);
+        }
         if ($request->validated('status') === 'paid') {
             return ['data' => $action->execute($line, $context->branch(), $request->user()->getAuthIdentifier(), $request->header('Idempotency-Key'))];
         }

@@ -7,6 +7,7 @@ use App\Models\AccountTransaction;
 use App\Models\AgreementAdditionalPayment;
 use App\Models\Branch;
 use App\Services\DocumentNumberGenerator;
+use App\Services\PaymentModeDetails;
 use Illuminate\Support\Facades\DB;
 
 class PostAdditionalAgreementPayment
@@ -31,17 +32,23 @@ class PostAdditionalAgreementPayment
             }
 
             $direction = $lockedLine->direction;
+            $details = PaymentModeDetails::normalize(['payment_mode' => $lockedLine->payment_mode, 'remarks' => $lockedLine->particulars, 'cheque_no' => $lockedLine->cheque_no, 'cheque_date' => $lockedLine->cheque_date, 'bank_name' => $lockedLine->bank_name, 'bank_reference' => $lockedLine->bank_reference, 'transfer_date' => $lockedLine->transfer_date]);
             $transaction = AccountTransaction::query()->create([
                 'branch_id' => $branch->id,
-                'document_no' => $this->numbers->next($branch, $direction === 'inward' ? 'INWARD_RECEIPT' : 'OUTWARD_RECEIPT', (int) now()->format('Y')),
+                'document_no' => $this->numbers->next($branch, $direction === 'inward' ? 'INWARD_RECEIPT' : 'OUTWARD_RECEIPT', (int) now($branch->timezone)->format('Y')),
                 'direction' => $direction,
                 'transaction_date' => now()->toDateString(),
-                'payment_mode' => $lockedLine->payment_mode,
+                'payment_mode' => $details['payment_mode'],
                 'amount' => $lockedLine->amount,
                 'party_customer_id' => $this->partyId($type, $agreementId, $branch),
                 'source_type' => "{$type}_agreement_additional_payment",
                 'source_id' => $lockedLine->id,
-                'remarks' => $lockedLine->particulars.' | '.$lockedLine->category,
+                'remarks' => $details['remarks'].' | '.$lockedLine->category,
+                'cheque_no' => $details['cheque_no'] ?? null,
+                'cheque_date' => $details['cheque_date'] ?? null,
+                'bank_name' => $details['bank_name'] ?? null,
+                'bank_reference' => $details['bank_reference'] ?? null,
+                'transfer_date' => $details['transfer_date'] ?? null,
                 'status' => 'posted',
                 'created_by' => $userId,
                 'posted_by' => $userId,
