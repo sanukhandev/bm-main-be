@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\CreatePettyCashEntry;
 use App\Actions\VoidAccountTransaction;
+use App\Enums\ChequeStatus;
+use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Accounts\CreatePettyCashRequest;
 use App\Http\Requests\Api\V1\Accounts\VoidAccountTransactionRequest;
@@ -51,8 +53,8 @@ class AccountsController extends Controller
                 'petty_cash_balance' => $this->pettyBalance($branchId),
                 'tenant_outstanding_receivable' => $outstanding('tenant_agreement_installments'),
                 'owner_outstanding_payable' => $outstanding('owner_agreement_installments'),
-                'pending_cheque_inward' => (clone $base)->where('direction', 'inward')->where('payment_mode', 'cheque')->sum('amount'),
-                'pending_cheque_outward' => (clone $base)->where('direction', 'outward')->where('payment_mode', 'cheque')->sum('amount'),
+                'pending_cheque_inward' => (clone $base)->where('direction', 'inward')->where('payment_mode', 'cheque')->whereIn('cheque_status', [ChequeStatus::Received->value, ChequeStatus::Deposited->value])->sum('amount'),
+                'pending_cheque_outward' => (clone $base)->where('direction', 'outward')->where('payment_mode', 'cheque')->whereIn('cheque_status', [ChequeStatus::Received->value, ChequeStatus::Deposited->value])->sum('amount'),
                 'recent_transactions' => $recentTransactions,
             ],
         ];
@@ -133,10 +135,34 @@ class AccountsController extends Controller
         $query = AccountTransaction::query()->with('party')->where('branch_id', $context->id())->where('direction', $direction)->orderByDesc('transaction_date')->orderByDesc('id');
         $query->when($request->query('status'), fn ($q, $value) => $q->where('status', $value));
         $query->when($request->query('payment_mode'), fn ($q, $value) => $q->where('payment_mode', $value));
+        $query->when($request->query('cheque_status'), fn ($q, $value) => $q->where('cheque_status', $value));
         $query->when($request->query('date_from'), fn ($q, $value) => $q->whereDate('transaction_date', '>=', $value));
         $query->when($request->query('date_to'), fn ($q, $value) => $q->whereDate('transaction_date', '<=', $value));
 
         return AccountTransactionResource::collection($query->paginate(min((int) $request->query('per_page', 25), 100)));
+    }
+
+    public function chequeAction(Request $request, int $transaction, string $action, BranchContext $context): AccountTransactionResource
+    {
+        $target = match ($action) {
+            'deposit' => ChequeStatus::Deposited,
+            'clear' => ChequeStatus::Cleared,
+            'bounce' => ChequeStatus::Bounced,
+            'cancel' => ChequeStatus::Cancelled,
+            default => throw new ApiException('INVALID_CHEQUE_OPERATION', 'Unsupported cheque operation.', 422),
+        };
+        $record = AccountTransaction::query()->where('branch_id', $context->id())->lockForUpdate()->findOrFail($transaction);
+        if ($record->payment_mode?->value !== 'cheque' || ! $record->cheque_status) {
+            throw new ApiException('INVALID_CHEQUE_OPERATION', 'Only cheque transactions support cheque actions.', 422);
+        }
+        $current = $record->cheque_status instanceof ChequeStatus ? $record->cheque_status : ChequeStatus::from($record->cheque_status);
+        if (! in_array($target->value, $current->nextStatuses(), true)) {
+            throw new ApiException('INVALID_CHEQUE_STATUS_TRANSITION', 'This cheque status transition is not allowed.', 409);
+        }
+        $record->updateQuietly(['cheque_status' => $target->value, 'cheque_status_changed_at' => now(), 'cheque_status_changed_by' => $request->user()->getAuthIdentifier()]);
+        DB::table('audit_logs')->insert(['branch_id' => $context->id(), 'user_id' => $request->user()->getAuthIdentifier(), 'action' => 'cheque_status_changed', 'entity_type' => 'account_transaction', 'entity_id' => $record->id, 'metadata_json' => json_encode(['from' => $current->value, 'to' => $target->value]), 'created_at' => now(), 'updated_at' => now()]);
+
+        return new AccountTransactionResource($record->refresh());
     }
 
     private function pettyBalance(int $branchId): string

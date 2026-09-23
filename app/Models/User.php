@@ -48,6 +48,20 @@ class User extends Authenticatable
         return $this->hasGlobalRole('super_admin');
     }
 
+    public function hasPermission(string $permission, ?int $branchId = null): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        $roleIds = DB::table('user_global_roles')->where('user_id', $this->getKey())->pluck('role_id')
+            ->merge($branchId ? DB::table('branch_user_roles')->where('user_id', $this->getKey())->where('branch_id', $branchId)->pluck('role_id') : [])
+            ->unique();
+
+        return DB::table('role_permissions')->join('permissions', 'permissions.id', '=', 'role_permissions.permission_id')
+            ->whereIn('role_permissions.role_id', $roleIds)->where('permissions.key', $permission)->exists();
+    }
+
     public function hasGlobalRole(string $role): bool
     {
         return DB::table('user_global_roles')
