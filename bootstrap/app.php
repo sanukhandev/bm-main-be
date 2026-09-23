@@ -88,6 +88,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 $payload['errors'] = $errors;
             }
 
+            if ($exception instanceof ApiException && $exception->errors !== null) {
+                $payload['errors'] = $exception->errors;
+            }
+
             return response()->json($payload, $status);
         });
     })->create();

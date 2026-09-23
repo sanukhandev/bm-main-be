@@ -13,7 +13,9 @@ use App\Models\CustomerRoleAssignment;
 use App\Models\TenantAgreement;
 use App\Services\AgreementScheduleService;
 use App\Services\DocumentNumberGenerator;
+use App\Services\PropertyAvailabilityService;
 use App\Support\Branch\BranchContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -30,15 +32,21 @@ class TenantAgreementController extends Controller
         return TenantAgreementResource::collection($query->paginate($filters['per_page'] ?? 25));
     }
 
-    public function store(StoreTenantAgreementRequest $request, BranchContext $branchContext, DocumentNumberGenerator $numbers, AgreementScheduleService $schedules): TenantAgreementResource
+    public function store(StoreTenantAgreementRequest $request, BranchContext $branchContext, DocumentNumberGenerator $numbers, AgreementScheduleService $schedules, PropertyAvailabilityService $availability): TenantAgreementResource
     {
         Gate::authorize('create', TenantAgreement::class);
         $data = $request->validated();
         $this->ensureTenantRole($branchContext->id(), $data['tenant_customer_id']);
-        $this->ensureCoverage($branchContext->id(), $data['properties']);
-
-        $agreement = DB::transaction(function () use ($data, $branchContext, $numbers, $schedules) {
+        $agreement = DB::transaction(function () use ($data, $branchContext, $numbers, $schedules, $availability) {
             $properties = $data['properties'];
+            $startDate = CarbonImmutable::parse($data['start_date']);
+            $endDate = CarbonImmutable::parse($data['end_date']);
+            $lockedProperties = $availability->lockProperties($branchContext->id(), array_column($properties, 'property_id'));
+            if (count($lockedProperties) !== count($properties)) {
+                throw new ApiException('PROPERTY_NOT_FOUND', 'One or more selected properties are not available in the active branch.', 404);
+            }
+            $availability->assertOwnerCoverage($branchContext->id(), $properties, $startDate, $endDate);
+            $availability->assertAvailable($branchContext->id(), array_column($properties, 'property_id'), $startDate, $endDate);
             unset($data['properties']);
             $data['agreement_no'] ??= $numbers->next($branchContext->branch(), 'TENANT_AGREEMENT', (int) date('Y', strtotime($data['start_date'])));
             $agreement = new TenantAgreement($data);
@@ -64,19 +72,33 @@ class TenantAgreementController extends Controller
         return new TenantAgreementResource($tenantAgreement->load(['tenant', 'properties', 'installments', 'disputes.comments', 'additionalPayments']));
     }
 
-    public function update(UpdateTenantAgreementRequest $request, TenantAgreement $tenantAgreement, BranchContext $branchContext): TenantAgreementResource
+    public function update(UpdateTenantAgreementRequest $request, TenantAgreement $tenantAgreement, BranchContext $branchContext, PropertyAvailabilityService $availability): TenantAgreementResource
     {
         Gate::authorize('update', $tenantAgreement);
         $data = $request->validated();
         if (isset($data['tenant_customer_id'])) {
             $this->ensureTenantRole($branchContext->id(), $data['tenant_customer_id']);
         }
-        if (isset($data['properties'])) {
-            $this->ensureCoverage($branchContext->id(), $data['properties']);
-        }
-
-        DB::transaction(function () use ($data, $tenantAgreement, $branchContext) {
+        DB::transaction(function () use ($data, $tenantAgreement, $branchContext, $availability) {
             $properties = $data['properties'] ?? null;
+            $startDate = CarbonImmutable::parse($data['start_date'] ?? $tenantAgreement->start_date);
+            $endDate = CarbonImmutable::parse($data['end_date'] ?? $tenantAgreement->end_date);
+            if ($properties !== null || isset($data['start_date']) || isset($data['end_date'])) {
+                $properties ??= $tenantAgreement->properties->map(fn ($property) => [
+                    'property_id' => $property->id,
+                    'source_owner_agreement_id' => $property->pivot->source_owner_agreement_id,
+                ])->all();
+                $propertyIds = array_merge(
+                    $tenantAgreement->properties()->pluck('properties.id')->all(),
+                    array_column($properties, 'property_id'),
+                );
+                $lockedProperties = $availability->lockProperties($branchContext->id(), $propertyIds);
+                if (count($lockedProperties) !== count(array_unique(array_map('intval', $propertyIds)))) {
+                    throw new ApiException('PROPERTY_NOT_FOUND', 'One or more selected properties are not available in the active branch.', 404);
+                }
+                $availability->assertOwnerCoverage($branchContext->id(), $properties, $startDate, $endDate);
+                $availability->assertAvailable($branchContext->id(), array_column($properties, 'property_id'), $startDate, $endDate, $tenantAgreement->id);
+            }
             unset($data['properties']);
             $tenantAgreement->update($data);
             if ($properties !== null) {
@@ -136,20 +158,6 @@ class TenantAgreementController extends Controller
     {
         if (! CustomerRoleAssignment::query()->where('branch_id', $branchId)->where('customer_id', $customerId)->where('role', 'tenant')->exists()) {
             throw new ApiException('TENANT_ROLE_REQUIRED', 'The selected customer is not a tenant.', 422);
-        }
-    }
-
-    private function ensureCoverage(int $branchId, array $properties): void
-    {
-        foreach ($properties as $property) {
-            $covered = DB::table('owner_agreement_properties')
-                ->where('branch_id', $branchId)
-                ->where('property_id', $property['property_id'])
-                ->where('owner_agreement_id', $property['source_owner_agreement_id'])
-                ->exists();
-            if (! $covered) {
-                throw new ApiException('PROPERTY_COVERAGE_REQUIRED', 'Each tenant property must be covered by its source owner agreement.', 422);
-            }
         }
     }
 }
