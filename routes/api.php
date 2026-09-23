@@ -12,6 +12,7 @@ use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\MaintenanceController;
 use App\Http\Controllers\Api\V1\OwnerAgreementController;
 use App\Http\Controllers\Api\V1\PropertyController;
+use App\Http\Controllers\Api\V1\ReportsController;
 use App\Http\Controllers\Api\V1\TenantAgreementController;
 use Illuminate\Support\Facades\Route;
 
@@ -34,6 +35,15 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
         Route::get('/dashboard/metrics', [DashboardController::class, 'metrics']);
         Route::get('/dashboard/operational', [DashboardController::class, 'operational']);
+        Route::get('/reports/owner-agreements', [ReportsController::class, 'ownerAgreements']);
+        Route::get('/reports/tenant-agreements', [ReportsController::class, 'tenantAgreements']);
+        Route::get('/reports/agreement-expiry', [ReportsController::class, 'expiry']);
+        Route::get('/reports/tenant-outstanding', [ReportsController::class, 'tenantOutstanding'])->middleware('permission:accounts.view');
+        Route::get('/reports/owner-payables', [ReportsController::class, 'ownerPayables'])->middleware('permission:accounts.view');
+        Route::get('/reports/inward-receipts', [ReportsController::class, 'inwardReceipts'])->middleware('permission:accounts.view');
+        Route::get('/reports/outward-vouchers', [ReportsController::class, 'outwardVouchers'])->middleware('permission:accounts.view');
+        Route::get('/reports/daily-cash-movement', [ReportsController::class, 'dailyCashMovement'])->middleware('permission:accounts.view');
+        Route::get('/reports/petty-cash', [ReportsController::class, 'pettyCash'])->middleware('permission:accounts.view');
         Route::get('/accounts/dashboard', [AccountsController::class, 'dashboard'])->middleware('permission:accounts.view');
         Route::get('/accounts/inward', [AccountsController::class, 'inward'])->middleware('permission:accounts.view');
         Route::get('/accounts/outward', [AccountsController::class, 'outward'])->middleware('permission:accounts.view');
