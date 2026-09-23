@@ -3,12 +3,27 @@
 namespace Tests\Feature\Api\Properties;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\ApiScenario;
 use Tests\TestCase;
 
 class PropertyBoundaryTest extends TestCase
 {
     use ApiScenario, RefreshDatabase;
+
+    public static function propertyTypes(): array
+    {
+        return [
+            ['apartment'],
+            ['villa'],
+            ['shop'],
+            ['office'],
+            ['space'],
+            ['labor_camp'],
+            ['warehouse'],
+            ['land'],
+        ];
+    }
 
     protected function setUp(): void
     {
@@ -57,5 +72,61 @@ class PropertyBoundaryTest extends TestCase
         $this->branchRequest()->deleteJson('/api/v1/properties/'.$property['id'])->assertNoContent();
         $this->assertDatabaseHas('properties', ['id' => $property['id'], 'status' => 'archived']);
         $this->assertNotNull($this->app['db']->table('properties')->where('id', $property['id'])->value('deleted_at'));
+    }
+
+    #[DataProvider('propertyTypes')]
+    public function test_all_supported_property_types_are_accepted_on_create(string $propertyType): void
+    {
+        $property = $this->branchRequest()->postJson('/api/v1/properties', [
+            'owner_customer_id' => $this->customerA,
+            'property_code' => 'TYPE-'.strtoupper($propertyType),
+            'property_type' => $propertyType,
+            'name' => 'Supported '.$propertyType,
+        ])->assertCreated()->json('data');
+
+        $this->assertSame($propertyType, $property['property_type']);
+        $this->assertDatabaseHas('properties', ['id' => $property['id'], 'property_type' => $propertyType]);
+    }
+
+    #[DataProvider('propertyTypes')]
+    public function test_all_supported_property_types_are_accepted_on_update(string $propertyType): void
+    {
+        $property = $this->branchRequest()->postJson('/api/v1/properties', [
+            'owner_customer_id' => $this->customerA,
+            'property_code' => 'UPDATE-'.strtoupper($propertyType),
+            'property_type' => 'apartment',
+            'name' => 'Update target',
+        ])->json('data');
+
+        $this->branchRequest()->patchJson('/api/v1/properties/'.$property['id'], [
+            'property_type' => $propertyType,
+        ])->assertOk()->assertJsonPath('data.property_type', $propertyType);
+    }
+
+    public function test_invalid_property_types_are_rejected_on_create_and_update(): void
+    {
+        $this->branchRequest()->postJson('/api/v1/properties', [
+            'owner_customer_id' => $this->customerA,
+            'property_code' => 'INVALID-001',
+            'property_type' => 'random_type',
+            'name' => 'Invalid property',
+        ])->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
+
+        $property = $this->branchRequest()->postJson('/api/v1/properties', [
+            'owner_customer_id' => $this->customerA,
+            'property_code' => 'VALID-001',
+            'property_type' => 'apartment',
+            'name' => 'Valid property',
+        ])->json('data');
+
+        $this->branchRequest()->patchJson('/api/v1/properties/'.$property['id'], [
+            'property_type' => 'unit',
+        ])->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
+    }
+
+    public function test_property_type_filter_uses_the_same_enum_validation(): void
+    {
+        $this->branchRequest()->getJson('/api/v1/properties?property_type=apartment')->assertOk();
+        $this->branchRequest()->getJson('/api/v1/properties?property_type=xyz')->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
     }
 }
