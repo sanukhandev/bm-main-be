@@ -15,7 +15,8 @@ class StoreCustomerRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->merge(['customer_code' => strtoupper(trim((string) $this->input('customer_code')))]);
+        $code = trim((string) $this->input('customer_code', ''));
+        $this->merge(['customer_code' => $code !== '' ? strtoupper($code) : null]);
     }
 
     public function rules(): array

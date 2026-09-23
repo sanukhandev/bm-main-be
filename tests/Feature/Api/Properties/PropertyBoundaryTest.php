@@ -129,4 +129,18 @@ class PropertyBoundaryTest extends TestCase
         $this->branchRequest()->getJson('/api/v1/properties?property_type=apartment')->assertOk();
         $this->branchRequest()->getJson('/api/v1/properties?property_type=xyz')->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
     }
+
+    public function test_property_code_is_generated_from_branch_emirate_building_unit_and_type(): void
+    {
+        $property = $this->branchRequest()->postJson('/api/v1/properties', [
+            'owner_customer_id' => $this->customerA,
+            'state_or_emirate' => 'Dubai',
+            'building_name' => 'Al Madeena Tower',
+            'unit_number' => '101',
+            'property_type' => 'apartment',
+            'name' => 'Flat 101',
+        ])->assertCreated()->json('data');
+
+        $this->assertSame('E2E-A-DXB-AL-MADEENA-TOWER-101-APT', $property['property_code']);
+    }
 }
