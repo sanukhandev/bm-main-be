@@ -15,4 +15,9 @@ class AccountTransactionAllocation extends Model
     {
         return ['amount' => 'decimal:2'];
     }
+
+    public function transaction()
+    {
+        return $this->belongsTo(AccountTransaction::class, 'account_transaction_id');
+    }
 }

@@ -12,4 +12,9 @@ class WorkOrderPayment extends Model
     {
         return ['amount' => 'decimal:2', 'due_date' => 'date:Y-m-d', 'cheque_date' => 'date:Y-m-d', 'transfer_date' => 'date:Y-m-d'];
     }
+
+    public function accountTransaction()
+    {
+        return $this->hasOne(AccountTransaction::class, 'source_id')->where('source_type', 'work_order_payment');
+    }
 }
