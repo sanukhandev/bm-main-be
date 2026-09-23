@@ -106,6 +106,21 @@ class ApiFoundationTest extends TestCase
         $this->assertSame($invalid->json('message'), $inactiveResponse->json('message'));
     }
 
+    public function test_sse_api_requests_return_json_unauthorized_instead_of_redirect_500(): void
+    {
+        $response = $this->withHeaders([
+            'Accept' => 'text/event-stream',
+            'X-Branch-Id' => (string) $this->branchA,
+        ])->post('/api/v1/ai/zaakiy/chat', [
+            'message' => 'hi',
+            'history' => [],
+        ]);
+
+        $response->assertUnauthorized()
+            ->assertJsonPath('code', 'AUTHENTICATION_REQUIRED')
+            ->assertHeader('X-Request-Id');
+    }
+
     public function test_protected_routes_return_structured_unauthenticated_errors(): void
     {
         $response = $this->getJson('/api/v1/auth/me');
