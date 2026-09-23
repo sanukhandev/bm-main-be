@@ -12,4 +12,9 @@ class OwnerAgreementInstallment extends Model
     {
         return ['due_date' => 'date:Y-m-d', 'amount' => 'decimal:2', 'paid_amount' => 'decimal:2'];
     }
+
+    public function allocations()
+    {
+        return $this->hasMany(AccountTransactionAllocation::class, 'owner_agreement_installment_id');
+    }
 }

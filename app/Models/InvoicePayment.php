@@ -21,4 +21,9 @@ class InvoicePayment extends Model
     {
         return $this->belongsTo(Invoice::class);
     }
+
+    public function accountTransaction()
+    {
+        return $this->hasOne(AccountTransaction::class, 'source_id')->where('source_type', 'invoice_payment');
+    }
 }

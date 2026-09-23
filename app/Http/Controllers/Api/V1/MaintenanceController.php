@@ -104,7 +104,7 @@ class MaintenanceController extends Controller
 
     public function showWorkOrder(int $workOrder, BranchContext $context)
     {
-        return new WorkOrderResource(WorkOrder::query()->forBranch($context->id())->with(['property', 'vendor', 'lines.inventoryItem', 'payments'])->findOrFail($workOrder));
+        return new WorkOrderResource(WorkOrder::query()->forBranch($context->id())->with(['property', 'vendor', 'lines.inventoryItem', 'payments.accountTransaction'])->findOrFail($workOrder));
     }
 
     public function storeWorkOrderPayment(StoreWorkOrderPaymentRequest $request, int $workOrder, BranchContext $context)

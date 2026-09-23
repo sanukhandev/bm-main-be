@@ -69,7 +69,7 @@ class OwnerAgreementController extends Controller
     {
         Gate::authorize('view', $ownerAgreement);
 
-        return new OwnerAgreementResource($ownerAgreement->load(['owner', 'properties', 'installments', 'disputes.comments', 'additionalPayments']));
+        return new OwnerAgreementResource($ownerAgreement->load(['owner', 'properties', 'installments.allocations.transaction', 'disputes.comments', 'additionalPayments.accountTransaction']));
     }
 
     public function update(UpdateOwnerAgreementRequest $request, OwnerAgreement $ownerAgreement, BranchContext $branchContext): OwnerAgreementResource

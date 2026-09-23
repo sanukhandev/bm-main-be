@@ -30,7 +30,7 @@ class BillingController extends Controller
 
     public function quotation(int $quotation, BranchContext $context)
     {
-        return new QuotationResource(Quotation::query()->forBranch($context->id())->with(['workOrder', 'vendor', 'lines', 'payments'])->findOrFail($quotation));
+        return new QuotationResource(Quotation::query()->forBranch($context->id())->with(['workOrder', 'vendor', 'lines', 'payments.accountTransaction'])->findOrFail($quotation));
     }
 
     public function storeQuotation(StoreQuotationRequest $request, BranchContext $context, BillingDocumentService $service)
@@ -87,7 +87,7 @@ class BillingController extends Controller
 
     public function invoice(int $invoice, BranchContext $context)
     {
-        return new InvoiceResource(Invoice::query()->forBranch($context->id())->with(['quotation', 'workOrder', 'vendor', 'lines', 'payments'])->findOrFail($invoice));
+        return new InvoiceResource(Invoice::query()->forBranch($context->id())->with(['quotation', 'workOrder', 'vendor', 'lines', 'payments.accountTransaction'])->findOrFail($invoice));
     }
 
     public function storeInvoice(StoreInvoiceRequest $request, BranchContext $context, BillingDocumentService $service)

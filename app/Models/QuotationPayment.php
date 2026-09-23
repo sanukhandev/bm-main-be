@@ -21,4 +21,9 @@ class QuotationPayment extends Model
     {
         return $this->belongsTo(Quotation::class);
     }
+
+    public function accountTransaction()
+    {
+        return $this->hasOne(AccountTransaction::class, 'source_id')->where('source_type', 'quotation_payment');
+    }
 }

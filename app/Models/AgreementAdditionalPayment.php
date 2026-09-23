@@ -12,4 +12,10 @@ class AgreementAdditionalPayment extends Model
     {
         return ['amount' => 'decimal:2', 'due_date' => 'date:Y-m-d', 'cheque_date' => 'date:Y-m-d', 'transfer_date' => 'date:Y-m-d'];
     }
+
+    public function accountTransaction()
+    {
+        return $this->hasOne(AccountTransaction::class, 'source_id')
+            ->whereIn('source_type', ['owner_agreement_additional_payment', 'tenant_agreement_additional_payment']);
+    }
 }

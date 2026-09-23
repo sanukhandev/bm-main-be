@@ -26,12 +26,14 @@ class TenantAgreementResource extends JsonResource
                     'id' => $installment->id, 'installment_no' => $installment->installment_no, 'due_date' => $installment->due_date?->format('Y-m-d'),
                     'amount' => $installment->amount, 'paid_amount' => $installment->paid_amount, 'balance' => number_format((float) $installment->amount - (float) $installment->paid_amount, 2, '.', ''),
                     'payment_mode' => $installment->payment_mode, 'direction' => 'inward', 'status' => $installment->status, 'notes' => $installment->notes, 'is_extra' => false,
+                    'receipt' => $this->receiptFor($installment->allocations, $installment->status),
                 ]);
 
                 return $this->resource->relationLoaded('additionalPayments')
                     ? $rows->concat($this->additionalPayments->map(fn ($line) => [
                         'id' => 'extra-'.$line->id, 'installment_no' => 'extra-'.$line->id, 'due_date' => $line->due_date?->format('Y-m-d'), 'amount' => $line->amount, 'paid_amount' => '0.00', 'balance' => $line->amount,
                         'payment_mode' => $line->payment_mode, 'direction' => $line->direction, 'status' => $line->status, 'notes' => $line->particulars.' | '.$line->category, 'is_extra' => true,
+                        'receipt' => $this->receiptForAdditional($line),
                     ]))->values()
                     : $rows;
             }),
@@ -63,5 +65,24 @@ class TenantAgreementResource extends JsonResource
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    private function receiptFor($allocations, string $status): ?array
+    {
+        if ($status !== 'paid') {
+            return null;
+        }
+        $transaction = $allocations->map->transaction->filter(fn ($transaction) => $transaction && $transaction->status?->value === 'posted')->sortByDesc('id')->first();
+
+        return $transaction ? ['id' => $transaction->id, 'document_no' => $transaction->document_no, 'direction' => $transaction->direction?->value] : null;
+    }
+
+    private function receiptForAdditional($line): ?array
+    {
+        $transaction = $line->status === 'paid' ? $line->accountTransaction : null;
+
+        return $transaction && $transaction->status?->value === 'posted'
+            ? ['id' => $transaction->id, 'document_no' => $transaction->document_no, 'direction' => $transaction->direction?->value]
+            : null;
     }
 }

@@ -46,6 +46,19 @@ class FinancialPostingIntegrityTest extends TestCase
         $this->assertDatabaseHas('tenant_agreement_installments', ['id' => $this->installmentId, 'paid_amount' => '4000.00', 'status' => 'partially_paid']);
     }
 
+    public function test_paid_installment_exposes_its_receipt_reference(): void
+    {
+        $posted = $this->branchRequest()->withHeader('Idempotency-Key', 'payment-receipt-001')->postJson('/api/v1/tenant-agreements/'.$this->tenantAgreementId.'/payments', [
+            'amount' => '10000.00', 'installment_id' => $this->installmentId, 'payment_mode' => 'cash', 'payment_date' => '2026-09-23',
+        ])->assertCreated();
+
+        $this->branchRequest()->getJson('/api/v1/tenant-agreements/'.$this->tenantAgreementId)
+            ->assertOk()
+            ->assertJsonPath('data.installments.0.status', 'paid')
+            ->assertJsonPath('data.installments.0.receipt.id', $posted->json('data.id'))
+            ->assertJsonPath('data.installments.0.receipt.document_no', $posted->json('data.document_no'));
+    }
+
     public function test_mode_details_and_overpayment_are_rejected(): void
     {
         $payload = ['amount' => '1000.00', 'installment_id' => $this->installmentId, 'payment_mode' => 'cheque', 'payment_date' => '2026-09-23'];
