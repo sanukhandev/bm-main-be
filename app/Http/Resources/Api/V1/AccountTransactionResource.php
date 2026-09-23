@@ -24,6 +24,8 @@ class AccountTransactionResource extends JsonResource
             'remarks' => $this->remarks,
             'cheque_no' => $this->cheque_no,
             'cheque_date' => $this->cheque_date?->format('Y-m-d'),
+            'cheque_status' => $this->cheque_status?->value ?? $this->cheque_status,
+            'cheque_status_changed_at' => $this->cheque_status_changed_at?->toIso8601String(),
             'bank_name' => $this->bank_name,
             'bank_reference' => $this->bank_reference,
             'transfer_date' => $this->transfer_date?->format('Y-m-d'),

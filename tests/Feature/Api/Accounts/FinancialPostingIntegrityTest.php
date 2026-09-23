@@ -85,4 +85,28 @@ class FinancialPostingIntegrityTest extends TestCase
             $this->assertSame('FINANCIAL_RECORD_IMMUTABLE', $exception->errorCode);
         }
     }
+
+    public function test_cheque_defaults_to_received_and_transitions_without_new_posting(): void
+    {
+        $posted = $this->branchRequest()->withHeader('Idempotency-Key', 'cheque-001')->postJson('/api/v1/tenant-agreements/'.$this->tenantAgreementId.'/payments', [
+            'amount' => '1000.00', 'installment_id' => $this->installmentId, 'payment_mode' => 'cheque', 'payment_date' => '2026-09-23', 'cheque_no' => '123', 'cheque_date' => '2026-09-23', 'bank_name' => 'Test Bank',
+        ])->assertCreated();
+        $id = $posted->json('data.id');
+        $document = $posted->json('data.document_no');
+        $this->assertDatabaseHas('account_transactions', ['id' => $id, 'cheque_status' => 'received']);
+        $this->branchRequest()->postJson('/api/v1/accounts/transactions/'.$id.'/cheque/deposit')->assertOk()->assertJsonPath('data.cheque_status', 'deposited');
+        $this->branchRequest()->postJson('/api/v1/accounts/transactions/'.$id.'/cheque/clear')->assertOk()->assertJsonPath('data.cheque_status', 'cleared');
+        $this->assertSame(1, DB::table('account_transactions')->where('id', $id)->count());
+        $this->assertDatabaseHas('account_transactions', ['id' => $id, 'document_no' => $document, 'amount' => '1000.00']);
+        $this->branchRequest()->postJson('/api/v1/accounts/transactions/'.$id.'/cheque/deposit')->assertStatus(409)->assertJsonPath('code', 'INVALID_CHEQUE_STATUS_TRANSITION');
+    }
+
+    public function test_same_branch_user_without_accounts_void_cannot_void(): void
+    {
+        $posted = AccountTransaction::query()->create([
+            'branch_id' => $this->branchA, 'document_no' => 'VOID-TEST-001', 'direction' => 'inward', 'transaction_date' => '2026-09-23', 'payment_mode' => 'cash', 'amount' => '10.00', 'source_type' => 'manual', 'status' => 'posted', 'created_by' => $this->apiUser->id, 'posted_by' => $this->apiUser->id, 'posted_at' => now(),
+        ]);
+        DB::table('role_permissions')->where('role_id', DB::table('roles')->where('key', 'branch_admin')->value('id'))->where('permission_id', DB::table('permissions')->where('key', 'accounts.void')->value('id'))->delete();
+        $this->branchRequest()->postJson('/api/v1/accounts/transactions/'.$posted->id.'/void', ['reason' => 'No'])->assertForbidden();
+    }
 }

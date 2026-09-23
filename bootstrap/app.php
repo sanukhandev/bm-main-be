@@ -2,6 +2,7 @@
 
 use App\Exceptions\ApiException;
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\EnsureUserHasPermission;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\ResolveBranchContext;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -33,6 +34,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'user.active' => EnsureUserIsActive::class,
             'branch.context' => ResolveBranchContext::class,
+            'permission' => EnsureUserHasPermission::class,
         ]);
         $middleware->prependToPriorityList(SubstituteBindings::class, ResolveBranchContext::class);
     })
