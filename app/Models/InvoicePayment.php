@@ -10,15 +10,20 @@ class InvoicePayment extends Model
 {
     use BelongsToBranch;
 
-    protected $fillable = ['branch_id', 'invoice_id', 'direction', 'particulars', 'amount', 'due_date', 'payment_mode', 'status', 'terms', 'created_by'];
+    protected $fillable = ['branch_id', 'invoice_id', 'direction', 'particulars', 'amount', 'due_date', 'payment_mode', 'cheque_no', 'cheque_date', 'bank_name', 'bank_reference', 'transfer_date', 'status', 'terms', 'created_by'];
 
     protected function casts(): array
     {
-        return ['amount' => 'decimal:2', 'due_date' => 'date:Y-m-d'];
+        return ['amount' => 'decimal:2', 'due_date' => 'date:Y-m-d', 'cheque_date' => 'date:Y-m-d', 'transfer_date' => 'date:Y-m-d'];
     }
 
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function accountTransaction()
+    {
+        return $this->hasOne(AccountTransaction::class, 'source_id')->where('source_type', 'invoice_payment');
     }
 }

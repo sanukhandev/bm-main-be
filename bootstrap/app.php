@@ -2,10 +2,13 @@
 
 use App\Exceptions\ApiException;
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\EnsureApiJsonRequest;
+use App\Http\Middleware\EnsureUserHasPermission;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\ResolveBranchContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -23,12 +26,18 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withSchedule(function (Schedule $schedule): void {
+        $schedule->command('agreements:process-lifecycle')->daily();
+    })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
         $middleware->append(AssignRequestId::class);
+        $middleware->prepend(EnsureApiJsonRequest::class);
         $middleware->alias([
+            'api.json' => EnsureApiJsonRequest::class,
             'user.active' => EnsureUserIsActive::class,
             'branch.context' => ResolveBranchContext::class,
+            'permission' => EnsureUserHasPermission::class,
         ]);
         $middleware->prependToPriorityList(SubstituteBindings::class, ResolveBranchContext::class);
     })
@@ -86,6 +95,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
             if ($errors !== null) {
                 $payload['errors'] = $errors;
+            }
+
+            if ($exception instanceof ApiException && $exception->errors !== null) {
+                $payload['errors'] = $exception->errors;
             }
 
             return response()->json($payload, $status);

@@ -6,7 +6,10 @@ use App\Exceptions\ApiException;
 use App\Models\AccountTransaction;
 use App\Models\AccountTransactionAllocation;
 use App\Models\Branch;
+use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
+use App\Services\PaymentModeDetails;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 class PostAgreementPayment
@@ -57,23 +60,24 @@ class PostAgreementPayment
             $documentType = $direction === 'outward' ? 'OUTWARD_RECEIPT' : 'INWARD_RECEIPT';
             $partyId = $direction === 'outward' ? $agreement->owner_customer_id : $agreement->tenant_customer_id;
             $paymentSequence = ((int) DB::table('account_transactions')->where('branch_id', $branch->id)->where('source_type', "{$type}_agreement")->where('source_id', $agreementId)->lockForUpdate()->max('payment_sequence')) + 1;
+            $details = PaymentModeDetails::normalize($data, $paymentSequence);
             $transaction = AccountTransaction::query()->create([
                 'branch_id' => $branch->id,
-                'document_no' => $this->numbers->next($branch, $documentType, (int) date('Y', strtotime($data['payment_date']))),
+                'document_no' => $this->numbers->next($branch, $documentType, (int) CarbonImmutable::parse($data['payment_date'], $branch->timezone)->format('Y')),
                 'direction' => $direction,
                 'transaction_date' => $data['payment_date'],
-                'payment_mode' => $data['payment_mode'],
+                'payment_mode' => $details['payment_mode'],
                 'amount' => number_format($amountCents / 100, 2, '.', ''),
                 'party_customer_id' => $partyId,
                 'source_type' => "{$type}_agreement",
                 'source_id' => $agreementId,
                 'payment_sequence' => $paymentSequence,
-                'remarks' => $data['remarks'] ?? $this->defaultRemarks($data, $paymentSequence),
-                'cheque_no' => $data['cheque_no'] ?? null,
-                'cheque_date' => $data['cheque_date'] ?? null,
-                'bank_name' => $data['bank_name'] ?? null,
-                'bank_reference' => $data['bank_reference'] ?? null,
-                'transfer_date' => $data['transfer_date'] ?? null,
+                'remarks' => $details['remarks'],
+                'cheque_no' => $details['cheque_no'] ?? null,
+                'cheque_date' => $details['cheque_date'] ?? null,
+                'bank_name' => $details['bank_name'] ?? null,
+                'bank_reference' => $details['bank_reference'] ?? null,
+                'transfer_date' => $details['transfer_date'] ?? null,
                 'status' => 'posted',
                 'created_by' => $userId,
                 'posted_by' => $userId,
@@ -102,19 +106,10 @@ class PostAgreementPayment
                 $remaining -= $allocated;
             }
 
-            DB::table('audit_logs')->insert(['branch_id' => $branch->id, 'user_id' => $userId, 'action' => 'payment_posted', 'entity_type' => 'account_transaction', 'entity_id' => $transaction->id, 'metadata_json' => json_encode(['amount' => $transaction->amount, 'source_type' => $transaction->source_type, 'source_id' => $agreementId]), 'created_at' => now(), 'updated_at' => now()]);
+            app(AuditService::class)->record('accounts.transaction_posted', $transaction, null, null, ['transaction_id' => $transaction->id, 'document_number' => $transaction->document_no, 'direction' => $transaction->direction->value, 'amount' => $transaction->amount, 'payment_mode' => $transaction->payment_mode->value, 'source_type' => $transaction->source_type, 'source_id' => $agreementId], $branch->id, $userId);
 
             return $transaction->load('allocations', 'party');
         });
-    }
-
-    private function defaultRemarks(array $data, int $sequence): string
-    {
-        return match ($data['payment_mode']) {
-            'cheque' => 'Cheque '.($data['cheque_no'] ?? ''),
-            'bank_transfer' => 'Bank transfer '.($data['bank_reference'] ?? ''),
-            default => 'Cash payment '.$sequence,
-        };
     }
 
     private function cents(string $amount): int

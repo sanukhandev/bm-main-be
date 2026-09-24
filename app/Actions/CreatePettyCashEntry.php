@@ -4,6 +4,7 @@ namespace App\Actions;
 
 use App\Models\AccountTransaction;
 use App\Models\Branch;
+use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use Illuminate\Support\Facades\DB;
 
@@ -28,7 +29,7 @@ class CreatePettyCashEntry
                 'posted_by' => $userId,
                 'posted_at' => now(),
             ]);
-            DB::table('audit_logs')->insert(['branch_id' => $branch->id, 'user_id' => $userId, 'action' => 'petty_cash_posted', 'entity_type' => 'account_transaction', 'entity_id' => $transaction->id, 'metadata_json' => json_encode(['direction' => $data['direction'], 'amount' => $data['amount']]), 'created_at' => now(), 'updated_at' => now()]);
+            app(AuditService::class)->record('petty_cash.posted', $transaction, null, null, ['transaction_id' => $transaction->id, 'document_number' => $transaction->document_no, 'direction' => $data['direction'], 'amount' => $data['amount']], $branch->id, $userId);
 
             return $transaction->load('party');
         });

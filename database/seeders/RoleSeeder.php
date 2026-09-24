@@ -31,5 +31,21 @@ class RoleSeeder extends Seeder
                 'updated_at' => $now,
             ],
         ], ['key'], ['name', 'scope', 'description', 'is_system', 'updated_at']);
+
+        $permissions = collect([
+            ['key' => 'accounts.view', 'name' => 'View accounts'],
+            ['key' => 'accounts.post', 'name' => 'Post financial transactions'],
+            ['key' => 'accounts.void', 'name' => 'Void financial transactions'],
+            ['key' => 'audit.view', 'name' => 'View audit trail'],
+        ])->map(fn (array $permission) => [...$permission, 'created_at' => $now, 'updated_at' => $now]);
+        DB::table('permissions')->upsert($permissions->all(), ['key'], ['name', 'updated_at']);
+
+        $roleIds = DB::table('roles')->whereIn('key', ['super_admin', 'branch_admin'])->pluck('id');
+        $permissionIds = DB::table('permissions')->whereIn('key', ['accounts.view', 'accounts.post', 'accounts.void', 'audit.view'])->pluck('id');
+        foreach ($roleIds as $roleId) {
+            foreach ($permissionIds as $permissionId) {
+                DB::table('role_permissions')->updateOrInsert(['role_id' => $roleId, 'permission_id' => $permissionId]);
+            }
+        }
     }
 }

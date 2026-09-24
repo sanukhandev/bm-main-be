@@ -3,24 +3,20 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Services\OperationalDashboardService;
 use App\Support\Branch\BranchContext;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function metrics(BranchContext $branchContext): JsonResponse
+    public function metrics(Request $request, BranchContext $branchContext, OperationalDashboardService $service): JsonResponse
     {
-        $branchId = $branchContext->id();
+        return response()->json(['data' => $service->get($branchContext->id(), $request->user()->hasPermission('accounts.view', $branchContext->id()))]);
+    }
 
-        return response()->json([
-            'data' => [
-                'total_owners' => DB::table('customer_role_assignments')->where('branch_id', $branchId)->where('role', 'owner')->count(),
-                'total_tenants' => DB::table('customer_role_assignments')->where('branch_id', $branchId)->where('role', 'tenant')->count(),
-                'total_properties' => DB::table('properties')->where('branch_id', $branchId)->where('status', 'active')->count(),
-                'total_owner_agreements' => DB::table('owner_agreements')->where('branch_id', $branchId)->whereIn('status', ['approved', 'commenced'])->count(),
-                'total_tenant_agreements' => DB::table('tenant_agreements')->where('branch_id', $branchId)->whereIn('status', ['approved', 'commenced'])->count(),
-            ],
-        ]);
+    public function operational(Request $request, BranchContext $branchContext, OperationalDashboardService $service): JsonResponse
+    {
+        return response()->json(['data' => $service->get($branchContext->id(), $request->user()->hasPermission('accounts.view', $branchContext->id()))]);
     }
 }

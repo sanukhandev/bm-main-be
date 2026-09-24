@@ -23,6 +23,11 @@ class TenantAgreementPolicy
         return $user->isActive() && $this->matchesBranch($agreement);
     }
 
+    public function lifecycle(User $user, TenantAgreement $agreement): bool
+    {
+        return $user->isActive() && $this->matchesBranch($agreement);
+    }
+
     public function update(User $user, TenantAgreement $agreement): bool
     {
         return $user->isActive() && $this->matchesBranch($agreement) && in_array($agreement->status, ['draft', 'pending_approval'], true);

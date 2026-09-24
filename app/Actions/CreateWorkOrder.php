@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Models\Branch;
 use App\Models\StockMovement;
 use App\Models\WorkOrder;
+use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use Illuminate\Support\Facades\DB;
 
@@ -35,7 +36,7 @@ class CreateWorkOrder
                 if ($created->line_type === 'inventory') {
                     StockMovement::query()->create(['branch_id' => $branch->id, 'inventory_item_id' => $created->inventory_item_id, 'movement_type' => 'work_order_consumption', 'quantity' => 0 - (float) $created->quantity, 'unit_cost' => $created->unit_cost, 'reference_type' => 'work_order', 'reference_id' => $order->id, 'occurred_at' => now(), 'created_by' => $userId, 'notes' => $created->description]);
                 }
-            } DB::table('audit_logs')->insert(['branch_id' => $branch->id, 'user_id' => $userId, 'action' => 'work_order_created', 'entity_type' => 'work_order', 'entity_id' => $order->id, 'metadata_json' => json_encode(['work_order_no' => $order->work_order_no]), 'created_at' => now(), 'updated_at' => now()]);
+            } app(AuditService::class)->record('work_order.created', $order, null, ['work_order_no' => $order->work_order_no, 'status' => $order->status], [], $branch->id, $userId);
 
             return $order->load(['property', 'vendor', 'lines.inventoryItem']);
         });

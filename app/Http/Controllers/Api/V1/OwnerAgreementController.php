@@ -11,7 +11,9 @@ use App\Http\Requests\Api\V1\Agreements\UpdateOwnerAgreementRequest;
 use App\Http\Resources\Api\V1\OwnerAgreementResource;
 use App\Models\CustomerRoleAssignment;
 use App\Models\OwnerAgreement;
+use App\Services\AgreementLifecycleService;
 use App\Services\AgreementScheduleService;
+use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use App\Support\Branch\BranchContext;
 use Illuminate\Support\Facades\DB;
@@ -48,6 +50,14 @@ class OwnerAgreementController extends Controller
                 'owner_customer_id' => $agreement->owner_customer_id,
             ]);
             $schedules->create('owner', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode);
+            app(AuditService::class)->record('owner_agreement.created', $agreement, null, [
+                'agreement_no' => $agreement->agreement_no,
+                'owner_customer_id' => $agreement->owner_customer_id,
+                'start_date' => $agreement->start_date?->toDateString(),
+                'end_date' => $agreement->end_date?->toDateString(),
+                'status' => $agreement->status,
+                'total_amount' => $agreement->total_amount,
+            ]);
 
             return $agreement;
         });
@@ -59,7 +69,7 @@ class OwnerAgreementController extends Controller
     {
         Gate::authorize('view', $ownerAgreement);
 
-        return new OwnerAgreementResource($ownerAgreement->load(['owner', 'properties', 'installments', 'disputes.comments', 'additionalPayments']));
+        return new OwnerAgreementResource($ownerAgreement->load(['owner', 'properties', 'installments.allocations.transaction', 'disputes.comments', 'additionalPayments.accountTransaction']));
     }
 
     public function update(UpdateOwnerAgreementRequest $request, OwnerAgreement $ownerAgreement, BranchContext $branchContext): OwnerAgreementResource
@@ -74,7 +84,8 @@ class OwnerAgreementController extends Controller
             $this->ensurePropertiesBelongToOwner($branchContext->id(), $propertyIds, $data['owner_customer_id'] ?? $ownerAgreement->owner_customer_id);
         }
 
-        DB::transaction(function () use ($data, $ownerAgreement, $branchContext) {
+        $before = $ownerAgreement->only(['agreement_no', 'owner_customer_id', 'start_date', 'end_date', 'status', 'total_amount']);
+        DB::transaction(function () use ($data, $ownerAgreement, $branchContext, $before) {
             $propertyIds = $data['property_ids'] ?? null;
             unset($data['property_ids']);
             $ownerAgreement->update($data);
@@ -85,36 +96,17 @@ class OwnerAgreementController extends Controller
                 ]);
             }
             $ownerAgreement->increment('lock_version');
+            app(AuditService::class)->record('owner_agreement.updated', $ownerAgreement, $before, $ownerAgreement->only(['agreement_no', 'owner_customer_id', 'start_date', 'end_date', 'status', 'total_amount']));
         });
 
         return new OwnerAgreementResource($ownerAgreement->refresh()->load(['owner', 'properties']));
     }
 
-    public function destroy(DeleteAgreementRequest $request, OwnerAgreement $ownerAgreement): OwnerAgreementResource
+    public function destroy(DeleteAgreementRequest $request, OwnerAgreement $ownerAgreement, BranchContext $branchContext, AgreementLifecycleService $lifecycle): OwnerAgreementResource
     {
         Gate::authorize('delete', $ownerAgreement);
-        if ($ownerAgreement->status === 'terminated') {
-            throw new ApiException('RESOURCE_CONFLICT', 'The agreement is already terminated.', 409);
-        }
-
-        DB::transaction(function () use ($request, $ownerAgreement) {
-            $fromStatus = $ownerAgreement->status;
-            $ownerAgreement->forceFill([
-                'status' => 'terminated',
-                'terminated_at' => now(),
-                'terminated_by_user_id' => $request->user()->getAuthIdentifier(),
-                'termination_reason' => $request->validated()['reason'] ?? 'Terminated through API.',
-            ])->save();
-            $ownerAgreement->delete();
-            $ownerAgreement->statusHistory()->create([
-                'branch_id' => $ownerAgreement->branch_id,
-                'from_status' => $fromStatus,
-                'to_status' => 'terminated',
-                'action' => 'terminated',
-                'changed_by_user_id' => $request->user()->getAuthIdentifier(),
-                'reason' => $request->validated()['reason'] ?? null,
-            ]);
-        });
+        $action = in_array($ownerAgreement->status, ['draft', 'pending_approval', 'approved'], true) ? 'cancelled' : 'terminated';
+        $ownerAgreement = $lifecycle->transition('owner', $ownerAgreement->id, $branchContext->id(), $action, $request->validated()['reason'] ?? null, $request->user()->getAuthIdentifier());
 
         return new OwnerAgreementResource($ownerAgreement->refresh()->load(['owner', 'properties']));
     }

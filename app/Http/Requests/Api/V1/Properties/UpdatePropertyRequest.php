@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Api\V1\Properties;
 
+use App\Enums\PropertyType;
 use App\Support\Branch\BranchContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -21,7 +22,7 @@ class UpdatePropertyRequest extends FormRequest
         return [
             'property_code' => ['sometimes', 'required', 'string', 'max:64', Rule::unique('properties', 'property_code')->where(fn ($query) => $query->where('branch_id', $branchId))->ignore($propertyId)],
             'unit_number' => ['sometimes', 'nullable', 'string', 'max:100'],
-            'property_type' => ['sometimes', 'required', 'string', 'max:30'],
+            'property_type' => ['sometimes', 'required', Rule::enum(PropertyType::class)],
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'building_name' => ['sometimes', 'nullable', 'string', 'max:255'],
             'address_line_1' => ['sometimes', 'nullable', 'string', 'max:255'],

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Auth\LoginRequest;
 use App\Http\Resources\Api\V1\BranchResource;
 use App\Http\Resources\Api\V1\UserResource;
+use App\Services\AuditService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -31,12 +32,16 @@ class AuthController extends Controller
         $request->session()->regenerate();
         $user = $request->user();
         $user->forceFill(['last_login_at' => now()])->save();
+        app(AuditService::class)->record('auth.login', $user, null, null, ['actor_type' => 'user'], null, $user->getAuthIdentifier());
 
         return new UserResource($user);
     }
 
     public function logout(Request $request)
     {
+        if ($request->user()) {
+            app(AuditService::class)->record('auth.logout', $request->user(), null, null, ['actor_type' => 'user'], null, $request->user()->getAuthIdentifier());
+        }
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
