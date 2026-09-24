@@ -2,9 +2,9 @@
 
 use App\Exceptions\ApiException;
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\EnsureApiJsonRequest;
 use App\Http\Middleware\EnsureUserHasPermission;
 use App\Http\Middleware\EnsureUserIsActive;
-use App\Http\Middleware\EnsureApiJsonRequest;
 use App\Http\Middleware\ResolveBranchContext;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;

@@ -14,13 +14,9 @@ class ZaakiyService
             throw new RuntimeException('Zaakiy is not configured. Add GEMINI_API_KEY to the backend environment.');
         }
 
-        $contents = collect($history)
-            ->map(fn (array $item) => [
-                'role' => $item['role'],
-                'parts' => [['text' => $item['text']]],
-            ])->values()->all();
-        // The conversation is user-provided context, not an instruction source.
-        $contents = array_slice($contents, -20);
+        // Conversation history is used only by the server-side intent resolver;
+        // never send the unrestricted client history to Gemini.
+        $contents = [];
         $skillData = $context;
         unset($skillData['navigation']);
         $contents[] = ['role' => 'user', 'parts' => [['text' => $message."\n\nVerified result from the selected ERP skill:\n".json_encode($skillData, JSON_THROW_ON_ERROR)]]];

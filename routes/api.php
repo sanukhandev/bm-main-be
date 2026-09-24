@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\BillingController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\IntelligentReportController;
 use App\Http\Controllers\Api\V1\MaintenanceController;
 use App\Http\Controllers\Api\V1\OwnerAgreementController;
 use App\Http\Controllers\Api\V1\PropertyController;
@@ -48,6 +49,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/outward-vouchers', [ReportsController::class, 'outwardVouchers'])->middleware('permission:accounts.view');
         Route::get('/reports/daily-cash-movement', [ReportsController::class, 'dailyCashMovement'])->middleware('permission:accounts.view');
         Route::get('/reports/petty-cash', [ReportsController::class, 'pettyCash'])->middleware('permission:accounts.view');
+        Route::get('/reports/intelligent', [IntelligentReportController::class, 'show'])->middleware('permission:accounts.view');
+        Route::get('/reports/intelligent/pdf', [IntelligentReportController::class, 'pdf'])->middleware('permission:accounts.view');
         Route::get('/accounts/dashboard', [AccountsController::class, 'dashboard'])->middleware('permission:accounts.view');
         Route::get('/accounts/inward', [AccountsController::class, 'inward'])->middleware('permission:accounts.view');
         Route::get('/accounts/outward', [AccountsController::class, 'outward'])->middleware('permission:accounts.view');
