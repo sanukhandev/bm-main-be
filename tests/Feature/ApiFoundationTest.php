@@ -283,7 +283,10 @@ class ApiFoundationTest extends TestCase
             'email' => $email,
             'password' => Hash::make('password'),
         ]);
-        DB::table('users')->where('id', $superAdmin->getKey())->update(['status' => 'active']);
+        DB::table('users')->where('id', $superAdmin->getKey())->update([
+            'status' => 'active',
+            'last_login_at' => now(),
+        ]);
         DB::table('user_global_roles')->insert([
             'user_id' => $superAdmin->getKey(),
             'role_id' => DB::table('roles')->where('key', 'super_admin')->value('id'),
