@@ -4,9 +4,13 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Administration\StoreUserRequest;
+use App\Http\Requests\Api\V1\Administration\UpdateUserRequest;
+use App\Http\Requests\Api\V1\Administration\UpdateUserStatusRequest;
 use App\Http\Resources\Api\V1\BranchResource;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\AuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -25,23 +29,71 @@ class AdministrationController extends Controller
         $branchRoles = DB::table('branch_user_roles')->join('roles', 'roles.id', '=', 'branch_user_roles.role_id')
             ->whereIn('branch_user_roles.user_id', $userIds)->select('branch_user_roles.user_id', 'roles.key')->get()->groupBy('user_id');
 
-        $users->getCollection()->transform(function (User $user) use ($branches, $globalRoles, $branchRoles) {
-            $roles = collect($globalRoles->get($user->id, collect()))->merge($branchRoles->get($user->id, collect()))->pluck('key')->unique()->values();
-
-            return [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'roles' => $roles,
-                'branches' => BranchResource::collection($branches->get($user->id, collect()))->resolve(),
-                'status' => $user->status,
-                'last_login_at' => $user->last_login_at?->toIso8601String(),
-                'created_at' => $user->created_at?->toIso8601String(),
-                'updated_at' => $user->updated_at?->toIso8601String(),
-            ];
-        });
+        $users->getCollection()->transform(fn (User $user) => $this->userPayload($user, $branches, $globalRoles, $branchRoles));
 
         return response()->json($users);
+    }
+
+    public function store(StoreUserRequest $request)
+    {
+        $this->ensureSuperAdmin($request);
+        $data = $request->validated();
+
+        return DB::transaction(function () use ($data, $request) {
+            $roles = $this->validatedRoles($data['roles']);
+            $this->ensureRoleScope($roles);
+            $user = User::query()->create([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => $data['password'],
+                'status' => 'active',
+            ]);
+            $this->syncAccess($user, $data['branch_ids'], $roles);
+            app(AuditService::class)->record('user.created', $user, null, $this->accessSnapshot($user), [], null, $request->user()->id);
+
+            return response()->json(['data' => $this->userPayload($user->fresh())], 201);
+        });
+    }
+
+    public function update(UpdateUserRequest $request, User $user)
+    {
+        $this->ensureSuperAdmin($request);
+        $data = $request->validated();
+        $before = $this->accessSnapshot($user);
+
+        return DB::transaction(function () use ($data, $before, $request, $user) {
+            $roles = $this->validatedRoles($data['roles']);
+            $this->ensureRoleScope($roles);
+            $user->forceFill(array_filter([
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => $data['password'] ?? null,
+            ], static fn ($value) => $value !== null))->save();
+            $this->guardSuperAdminRemoval($user, $roles);
+            $this->syncAccess($user, $data['branch_ids'], $roles);
+            $after = $this->accessSnapshot($user->fresh());
+            app(AuditService::class)->record('user.updated', $user, $before, $after, [], null, $request->user()->id);
+
+            return response()->json(['data' => $this->userPayload($user->fresh())]);
+        });
+    }
+
+    public function updateStatus(UpdateUserStatusRequest $request, User $user)
+    {
+        $this->ensureSuperAdmin($request);
+        $status = $request->validated('status');
+        if ($user->is($request->user()) && $status !== 'active') {
+            throw new ApiException('INVALID_USER_STATUS', 'You cannot suspend or deactivate your own account.', 422);
+        }
+        if ($status !== 'active' && $user->isSuperAdmin() && User::query()->where('status', 'active')->where('id', '<>', $user->id)->whereHas('globalRoles', fn ($query) => $query->where('key', 'super_admin'))->doesntExist()) {
+            throw new ApiException('LAST_SUPER_ADMIN', 'At least one active super admin must remain.', 422);
+        }
+
+        $before = ['status' => $user->status];
+        $user->forceFill(['status' => $status])->save();
+        app(AuditService::class)->record($status === 'active' ? 'user.activated' : 'user.deactivated', $user, $before, ['status' => $status], [], null, $request->user()->id);
+
+        return response()->json(['data' => $this->userPayload($user->fresh())]);
     }
 
     public function roles(Request $request)
@@ -62,5 +114,100 @@ class AdministrationController extends Controller
         if (! $request->user()->isSuperAdmin()) {
             throw new ApiException('FORBIDDEN', 'Only super admins can access administration data.', 403);
         }
+    }
+
+    private function validatedRoles(array $keys)
+    {
+        $roles = Role::query()->whereIn('key', $keys)->get();
+        if ($roles->count() !== count(array_unique($keys))) {
+            throw new ApiException('INVALID_USER_ROLES', 'One or more selected roles are invalid.', 422);
+        }
+
+        return $roles;
+    }
+
+    private function ensureRoleScope($roles): void
+    {
+        if ($roles->contains(fn (Role $role) => $role->scope === 'global') && ($roles->count() !== 1 || $roles->first()->key !== 'super_admin')) {
+            throw new ApiException('INVALID_USER_ROLES', 'The Super Admin role cannot be combined with branch roles.', 422);
+        }
+        if ($roles->isEmpty()) {
+            throw new ApiException('INVALID_USER_ROLES', 'At least one role is required.', 422);
+        }
+    }
+
+    private function syncAccess(User $user, array $branchIds, $roles): void
+    {
+        $branchIds = array_values(array_unique(array_map('intval', $branchIds)));
+        $branches = DB::table('branches')->whereIn('id', $branchIds)->where('status', 'active')->pluck('id')->all();
+        if (count($branches) !== count($branchIds)) {
+            throw new ApiException('INVALID_USER_BRANCHES', 'All selected branches must be active.', 422);
+        }
+
+        DB::table('branch_user_roles')->where('user_id', $user->id)->delete();
+        DB::table('user_global_roles')->where('user_id', $user->id)->delete();
+        DB::table('branch_user')->where('user_id', $user->id)->delete();
+        $now = now();
+        foreach ($branches as $index => $branchId) {
+            DB::table('branch_user')->insert([
+                'branch_id' => $branchId,
+                'user_id' => $user->id,
+                'status' => 'active',
+                'is_default' => $index === 0,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+        foreach ($roles as $role) {
+            if ($role->scope === 'global') {
+                DB::table('user_global_roles')->insert(['user_id' => $user->id, 'role_id' => $role->id, 'created_at' => $now]);
+
+                continue;
+            }
+            foreach ($branches as $branchId) {
+                DB::table('branch_user_roles')->insert(['branch_id' => $branchId, 'user_id' => $user->id, 'role_id' => $role->id, 'created_at' => $now]);
+            }
+        }
+    }
+
+    private function guardSuperAdminRemoval(User $user, $roles): void
+    {
+        if (! $user->isSuperAdmin() || $roles->contains('key', 'super_admin')) {
+            return;
+        }
+        if (User::query()->where('status', 'active')->where('id', '<>', $user->id)->whereHas('globalRoles', fn ($query) => $query->where('key', 'super_admin'))->doesntExist()) {
+            throw new ApiException('LAST_SUPER_ADMIN', 'At least one active super admin must remain.', 422);
+        }
+    }
+
+    private function accessSnapshot(User $user): array
+    {
+        return [
+            'name' => $user->name,
+            'email' => $user->email,
+            'status' => $user->status,
+            'branch_ids' => DB::table('branch_user')->where('user_id', $user->id)->where('status', 'active')->pluck('branch_id')->sort()->values()->all(),
+            'roles' => DB::table('user_global_roles')->join('roles', 'roles.id', '=', 'user_global_roles.role_id')->where('user_id', $user->id)->pluck('roles.key')->merge(DB::table('branch_user_roles')->join('roles', 'roles.id', '=', 'branch_user_roles.role_id')->where('user_id', $user->id)->pluck('roles.key'))->unique()->sort()->values()->all(),
+        ];
+    }
+
+    private function userPayload(User $user, $branches = null, $globalRoles = null, $branchRoles = null): array
+    {
+        $branches ??= DB::table('branch_user')->join('branches', 'branches.id', '=', 'branch_user.branch_id')->where('branch_user.user_id', $user->id)->where('branch_user.status', 'active')->select('branch_user.user_id', 'branches.*')->get()->groupBy('user_id');
+        $globalRoles ??= DB::table('user_global_roles')->join('roles', 'roles.id', '=', 'user_global_roles.role_id')->where('user_global_roles.user_id', $user->id)->select('user_global_roles.user_id', 'roles.key')->get()->groupBy('user_id');
+        $branchRoles ??= DB::table('branch_user_roles')->join('roles', 'roles.id', '=', 'branch_user_roles.role_id')->where('branch_user_roles.user_id', $user->id)->select('branch_user_roles.user_id', 'roles.key')->get()->groupBy('user_id');
+        $roles = collect($globalRoles->get($user->id, collect()))->merge($branchRoles->get($user->id, collect()))->pluck('key')->unique()->values();
+
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'roles' => $roles,
+            'branches' => BranchResource::collection($branches->get($user->id, collect()))->resolve(),
+            'status' => $user->status,
+            'last_login_at' => $user->last_login_at?->toIso8601String(),
+            'created_at' => $user->created_at?->toIso8601String(),
+            'updated_at' => $user->updated_at?->toIso8601String(),
+        ];
     }
 }
