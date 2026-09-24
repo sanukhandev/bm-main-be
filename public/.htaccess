@@ -4,6 +4,7 @@
     </IfModule>
 
     RewriteEngine On
+    DirectoryIndex index.html
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
@@ -16,6 +17,9 @@
     # Laravel owns API and Sanctum requests when Angular is deployed into this
     # same document root.
     RewriteRule ^(?:api|sanctum)(?:/|$) index.php [L]
+
+    # Angular owns the public root; Laravel remains the API entry point.
+    RewriteRule ^$ index.html [L]
 
     # Redirect Trailing Slashes If Not A Folder...
     RewriteCond %{REQUEST_FILENAME} !-d
