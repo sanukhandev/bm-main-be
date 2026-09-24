@@ -28,7 +28,11 @@ class IntentAnalyzer
         if (preg_match('/who are you|what are you|about zaakiy/', $query) === 1) {
             return new IntentFrame('identity', ['identity'], 'explain', question: $message);
         }
-        if (preg_match('/intelligent report|management report|operational profit|profit loss|leakage|management analysis/', $effective) === 1) {
+        if (preg_match('/faq|frequently asked|how do i|how can i|user guide|manual|help|support/', $effective) === 1) {
+            $modules = ['faq'];
+            $intent = 'help.faq';
+            $operation = 'explain';
+        } elseif (preg_match('/intelligent report|management report|operational profit|profit loss|leakage|management analysis/', $effective) === 1) {
             $modules = ['intelligent_report'];
             $intent = 'report.intelligent_summary';
             $operation = 'analyze';
