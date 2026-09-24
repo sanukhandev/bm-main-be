@@ -9,6 +9,7 @@ use App\Services\Zaakiy\Skills\AuditSkill;
 use App\Services\Zaakiy\Skills\BillingSkill;
 use App\Services\Zaakiy\Skills\CustomersSkill;
 use App\Services\Zaakiy\Skills\DashboardSkill;
+use App\Services\Zaakiy\Skills\FaqSkill;
 use App\Services\Zaakiy\Skills\GeneralSkill;
 use App\Services\Zaakiy\Skills\IdentitySkill;
 use App\Services\Zaakiy\Skills\IntelligentReportSkill;
@@ -35,6 +36,7 @@ class ReadOrchestrator
         private readonly AuditSkill $audit,
         private readonly GeneralSkill $general,
         private readonly IntelligentReportSkill $intelligentReport,
+        private readonly FaqSkill $faq,
     ) {}
 
     public function build(string $message, array $history, User $user, BranchContext $branch): array
@@ -47,6 +49,7 @@ class ReadOrchestrator
             'dashboard' => $this->dashboard, 'reports' => $this->reports, 'billing' => $this->billing,
             'audit' => $this->audit, 'general' => $this->general,
             'intelligent_report' => $this->intelligentReport,
+            'faq' => $this->faq,
         ];
         $evidence = [];
         foreach ($intent->modules as $module) {
