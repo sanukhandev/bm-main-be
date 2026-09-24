@@ -39,16 +39,37 @@ PROMPT;
         $url = rtrim((string) config('services.gemini.base_url'), '/')
             .'/models/'.rawurlencode((string) config('services.gemini.model')).':streamGenerateContent';
 
-        $response = Http::withOptions(['stream' => true])
-            ->acceptJson()
-            ->post($url.'?alt=sse&key='.urlencode($key), [
-                'systemInstruction' => ['parts' => [['text' => $prompt]]],
-                'contents' => $contents,
-                'generationConfig' => ['temperature' => 0.2, 'maxOutputTokens' => 1200],
-            ]);
+        $payload = [
+            'systemInstruction' => ['parts' => [['text' => $prompt]]],
+            'contents' => $contents,
+            'generationConfig' => ['temperature' => 0.2, 'maxOutputTokens' => 1200],
+        ];
+
+        $response = null;
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $response = Http::withOptions(['stream' => true])
+                ->timeout(90)
+                ->connectTimeout(15)
+                ->acceptJson()
+                ->post($url.'?alt=sse&key='.urlencode($key), $payload);
+
+            if (! in_array($response->status(), [429, 500, 502, 503, 504], true) || $attempt === 3) {
+                break;
+            }
+
+            usleep($attempt * 500_000);
+        }
+
+        if ($response === null) {
+            throw new RuntimeException('Zaakiy is temporarily unavailable. Please try again shortly.');
+        }
 
         if ($response->failed()) {
-            throw new RuntimeException('Gemini request failed with HTTP '.$response->status().'.');
+            $message = $response->status() >= 500
+                ? 'Zaakiy is temporarily unavailable. Please try again shortly.'
+                : 'Zaakiy is temporarily unavailable because the AI service rate limit was reached.';
+
+            throw new RuntimeException($message);
         }
 
         $body = $response->toPsrResponse()->getBody();
