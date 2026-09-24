@@ -304,6 +304,78 @@ class ApiFoundationTest extends TestCase
             ->assertJsonFragment(['name' => 'super_admin']);
     }
 
+    public function test_super_admin_can_create_update_and_suspend_users_with_branch_access(): void
+    {
+        $superAdmin = $this->superAdmin();
+        $this->actingAs($superAdmin, 'web');
+
+        $created = $this->postJson('/api/v1/admin/users', [
+            'name' => 'Managed User',
+            'email' => 'managed@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'branch_ids' => [$this->branchA],
+            'roles' => ['branch_admin'],
+        ]);
+
+        $created->assertCreated()->assertJsonPath('data.email', 'managed@example.com');
+        $managedId = $created->json('data.id');
+        $this->assertDatabaseHas('branch_user', ['user_id' => $managedId, 'branch_id' => $this->branchA, 'is_default' => 1]);
+        $this->assertDatabaseHas('branch_user_roles', ['user_id' => $managedId, 'branch_id' => $this->branchA]);
+
+        $this->patchJson('/api/v1/admin/users/'.$managedId, [
+            'name' => 'Updated Managed User',
+            'email' => 'managed-updated@example.com',
+            'branch_ids' => [$this->branchB],
+            'roles' => ['branch_admin'],
+        ])->assertOk()->assertJsonPath('data.name', 'Updated Managed User');
+        $this->assertDatabaseMissing('branch_user', ['user_id' => $managedId, 'branch_id' => $this->branchA]);
+        $this->assertDatabaseHas('branch_user', ['user_id' => $managedId, 'branch_id' => $this->branchB]);
+
+        $this->patchJson('/api/v1/admin/users/'.$managedId.'/status', ['status' => 'suspended'])
+            ->assertOk()->assertJsonPath('data.status', 'suspended');
+        $this->postJson('/api/v1/auth/login', ['email' => 'managed@example.com', 'password' => 'password123'])
+            ->assertUnauthorized()->assertJsonPath('code', 'INVALID_CREDENTIALS');
+    }
+
+    public function test_only_super_admin_can_manage_users_and_cannot_suspend_self(): void
+    {
+        $this->actingAs($this->branchUser, 'web');
+        $this->postJson('/api/v1/admin/users', [
+            'name' => 'Blocked User',
+            'email' => 'blocked@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'branch_ids' => [$this->branchA],
+            'roles' => ['branch_admin'],
+        ])->assertForbidden();
+    }
+
+    public function test_super_admin_cannot_suspend_self(): void
+    {
+        $superAdmin = $this->superAdmin();
+        $this->actingAs($superAdmin, 'web');
+        $this->patchJson('/api/v1/admin/users/'.$superAdmin->id.'/status', ['status' => 'suspended'])
+            ->assertUnprocessable()->assertJsonPath('code', 'INVALID_USER_STATUS');
+    }
+
+    private function superAdmin(): User
+    {
+        $user = User::query()->create([
+            'name' => 'Super Admin',
+            'email' => 'super-'.Str::uuid().'@example.com',
+            'password' => Hash::make('password'),
+        ]);
+        $user->forceFill(['status' => 'active'])->save();
+        DB::table('user_global_roles')->insert([
+            'user_id' => $user->id,
+            'role_id' => DB::table('roles')->where('key', 'super_admin')->value('id'),
+            'created_at' => now(),
+        ]);
+
+        return $user->fresh();
+    }
+
     public function test_login_rate_limit_returns_standard_json_error(): void
     {
         for ($attempt = 0; $attempt < 5; $attempt++) {

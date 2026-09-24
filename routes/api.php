@@ -32,6 +32,9 @@ Route::prefix('v1')->group(function () {
 
     Route::prefix('admin')->middleware(['auth:sanctum', 'user.active', 'throttle:api'])->group(function () {
         Route::get('/users', [AdministrationController::class, 'users']);
+        Route::post('/users', [AdministrationController::class, 'store']);
+        Route::patch('/users/{user}', [AdministrationController::class, 'update']);
+        Route::patch('/users/{user}/status', [AdministrationController::class, 'updateStatus']);
         Route::get('/roles', [AdministrationController::class, 'roles']);
     });
 
