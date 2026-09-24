@@ -3,10 +3,15 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\CreatePettyCashEntry;
+use App\Actions\VoidAccountTransaction;
+use App\Enums\ChequeStatus;
+use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Accounts\CreatePettyCashRequest;
+use App\Http\Requests\Api\V1\Accounts\VoidAccountTransactionRequest;
 use App\Http\Resources\Api\V1\AccountTransactionResource;
 use App\Models\AccountTransaction;
+use App\Services\AuditService;
 use App\Support\Branch\BranchContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -49,8 +54,8 @@ class AccountsController extends Controller
                 'petty_cash_balance' => $this->pettyBalance($branchId),
                 'tenant_outstanding_receivable' => $outstanding('tenant_agreement_installments'),
                 'owner_outstanding_payable' => $outstanding('owner_agreement_installments'),
-                'pending_cheque_inward' => (clone $base)->where('direction', 'inward')->where('payment_mode', 'cheque')->sum('amount'),
-                'pending_cheque_outward' => (clone $base)->where('direction', 'outward')->where('payment_mode', 'cheque')->sum('amount'),
+                'pending_cheque_inward' => (clone $base)->where('direction', 'inward')->where('payment_mode', 'cheque')->whereIn('cheque_status', [ChequeStatus::Received->value, ChequeStatus::Deposited->value])->sum('amount'),
+                'pending_cheque_outward' => (clone $base)->where('direction', 'outward')->where('payment_mode', 'cheque')->whereIn('cheque_status', [ChequeStatus::Received->value, ChequeStatus::Deposited->value])->sum('amount'),
                 'recent_transactions' => $recentTransactions,
             ],
         ];
@@ -69,6 +74,11 @@ class AccountsController extends Controller
     public function pettyCash(CreatePettyCashRequest $request, BranchContext $context, CreatePettyCashEntry $action): AccountTransactionResource
     {
         return new AccountTransactionResource($action->execute($context->branch(), $request->validated(), $request->user()->getAuthIdentifier()));
+    }
+
+    public function void(VoidAccountTransactionRequest $request, int $transaction, BranchContext $context, VoidAccountTransaction $action): AccountTransactionResource
+    {
+        return new AccountTransactionResource($action->execute($transaction, $context->branch(), $request->user()->getAuthIdentifier(), $request->validated('reason')));
     }
 
     public function pettyDaybook(Request $request, BranchContext $context)
@@ -126,10 +136,36 @@ class AccountsController extends Controller
         $query = AccountTransaction::query()->with('party')->where('branch_id', $context->id())->where('direction', $direction)->orderByDesc('transaction_date')->orderByDesc('id');
         $query->when($request->query('status'), fn ($q, $value) => $q->where('status', $value));
         $query->when($request->query('payment_mode'), fn ($q, $value) => $q->where('payment_mode', $value));
+        $query->when($request->query('cheque_status'), fn ($q, $value) => $q->where('cheque_status', $value));
         $query->when($request->query('date_from'), fn ($q, $value) => $q->whereDate('transaction_date', '>=', $value));
         $query->when($request->query('date_to'), fn ($q, $value) => $q->whereDate('transaction_date', '<=', $value));
 
         return AccountTransactionResource::collection($query->paginate(min((int) $request->query('per_page', 25), 100)));
+    }
+
+    public function chequeAction(Request $request, int $transaction, string $action, BranchContext $context): AccountTransactionResource
+    {
+        $target = match ($action) {
+            'deposit' => ChequeStatus::Deposited,
+            'clear' => ChequeStatus::Cleared,
+            'bounce' => ChequeStatus::Bounced,
+            'cancel' => ChequeStatus::Cancelled,
+            default => throw new ApiException('INVALID_CHEQUE_OPERATION', 'Unsupported cheque operation.', 422),
+        };
+        $record = AccountTransaction::query()->where('branch_id', $context->id())->lockForUpdate()->findOrFail($transaction);
+        if ($record->payment_mode?->value !== 'cheque' || ! $record->cheque_status) {
+            throw new ApiException('INVALID_CHEQUE_OPERATION', 'Only cheque transactions support cheque actions.', 422);
+        }
+        $current = $record->cheque_status instanceof ChequeStatus ? $record->cheque_status : ChequeStatus::from($record->cheque_status);
+        if (! in_array($target->value, $current->nextStatuses(), true)) {
+            throw new ApiException('INVALID_CHEQUE_STATUS_TRANSITION', 'This cheque status transition is not allowed.', 409);
+        }
+        $record->updateQuietly(['cheque_status' => $target->value, 'cheque_status_changed_at' => now(), 'cheque_status_changed_by' => $request->user()->getAuthIdentifier()]);
+        app(AuditService::class)->record('accounts.cheque_'.match ($target) {
+            ChequeStatus::Deposited => 'deposited', ChequeStatus::Cleared => 'cleared', ChequeStatus::Bounced => 'bounced', ChequeStatus::Cancelled => 'cancelled', default => 'changed'
+        }, $record, ['cheque_status' => $current->value], ['cheque_status' => $target->value], ['previous_cheque_status' => $current->value, 'new_cheque_status' => $target->value, 'cheque_no' => $record->cheque_no, 'transaction_id' => $record->id, 'document_number' => $record->document_no], $context->id(), $request->user()->getAuthIdentifier());
+
+        return new AccountTransactionResource($record->refresh());
     }
 
     private function pettyBalance(int $branchId): string

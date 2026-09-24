@@ -10,6 +10,7 @@ final class ApiException extends RuntimeException
         public readonly string $errorCode,
         string $message,
         public readonly int $status = 400,
+        public readonly ?array $errors = null,
     ) {
         parent::__construct($message);
     }

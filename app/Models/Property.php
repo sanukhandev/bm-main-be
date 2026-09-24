@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PropertyType;
 use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -32,7 +33,11 @@ class Property extends Model
 
     protected function casts(): array
     {
-        return ['area' => 'decimal:4', 'metadata_json' => 'array'];
+        return [
+            'property_type' => PropertyType::class,
+            'area' => 'decimal:4',
+            'metadata_json' => 'array',
+        ];
     }
 
     public function branch(): BelongsTo

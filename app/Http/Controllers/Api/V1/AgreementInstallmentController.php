@@ -54,6 +54,9 @@ class AgreementInstallmentController extends Controller
             if (! $installment) {
                 throw new ApiException('INSTALLMENT_NOT_FOUND', 'Installment not found in the active branch.', 404);
             }
+            if ((float) $installment->paid_amount > 0) {
+                throw new ApiException('FINANCIAL_RECORD_IMMUTABLE', 'An installment with posted payments cannot be marked defaulted.', 409);
+            }
             DB::table($table)->where('id', $installmentId)->update(['status' => $request->validated('status'), 'updated_at' => now()]);
 
             return DB::table($table)->where('id', $installmentId)->first();

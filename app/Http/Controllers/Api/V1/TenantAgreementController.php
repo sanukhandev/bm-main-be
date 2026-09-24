@@ -11,9 +11,13 @@ use App\Http\Requests\Api\V1\Agreements\UpdateTenantAgreementRequest;
 use App\Http\Resources\Api\V1\TenantAgreementResource;
 use App\Models\CustomerRoleAssignment;
 use App\Models\TenantAgreement;
+use App\Services\AgreementLifecycleService;
 use App\Services\AgreementScheduleService;
+use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
+use App\Services\PropertyAvailabilityService;
 use App\Support\Branch\BranchContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -30,15 +34,21 @@ class TenantAgreementController extends Controller
         return TenantAgreementResource::collection($query->paginate($filters['per_page'] ?? 25));
     }
 
-    public function store(StoreTenantAgreementRequest $request, BranchContext $branchContext, DocumentNumberGenerator $numbers, AgreementScheduleService $schedules): TenantAgreementResource
+    public function store(StoreTenantAgreementRequest $request, BranchContext $branchContext, DocumentNumberGenerator $numbers, AgreementScheduleService $schedules, PropertyAvailabilityService $availability): TenantAgreementResource
     {
         Gate::authorize('create', TenantAgreement::class);
         $data = $request->validated();
         $this->ensureTenantRole($branchContext->id(), $data['tenant_customer_id']);
-        $this->ensureCoverage($branchContext->id(), $data['properties']);
-
-        $agreement = DB::transaction(function () use ($data, $branchContext, $numbers, $schedules) {
+        $agreement = DB::transaction(function () use ($data, $branchContext, $numbers, $schedules, $availability) {
             $properties = $data['properties'];
+            $startDate = CarbonImmutable::parse($data['start_date']);
+            $endDate = CarbonImmutable::parse($data['end_date']);
+            $lockedProperties = $availability->lockProperties($branchContext->id(), array_column($properties, 'property_id'));
+            if (count($lockedProperties) !== count($properties)) {
+                throw new ApiException('PROPERTY_NOT_FOUND', 'One or more selected properties are not available in the active branch.', 404);
+            }
+            $availability->assertOwnerCoverage($branchContext->id(), $properties, $startDate, $endDate);
+            $availability->assertAvailable($branchContext->id(), array_column($properties, 'property_id'), $startDate, $endDate);
             unset($data['properties']);
             $data['agreement_no'] ??= $numbers->next($branchContext->branch(), 'TENANT_AGREEMENT', (int) date('Y', strtotime($data['start_date'])));
             $agreement = new TenantAgreement($data);
@@ -50,6 +60,14 @@ class TenantAgreementController extends Controller
                 ]);
             }
             $schedules->create('tenant', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode);
+            app(AuditService::class)->record('tenant_agreement.created', $agreement, null, [
+                'agreement_no' => $agreement->agreement_no,
+                'tenant_customer_id' => $agreement->tenant_customer_id,
+                'start_date' => $agreement->start_date?->toDateString(),
+                'end_date' => $agreement->end_date?->toDateString(),
+                'status' => $agreement->status,
+                'total_amount' => $agreement->total_amount,
+            ]);
 
             return $agreement;
         });
@@ -61,22 +79,37 @@ class TenantAgreementController extends Controller
     {
         Gate::authorize('view', $tenantAgreement);
 
-        return new TenantAgreementResource($tenantAgreement->load(['tenant', 'properties', 'installments', 'disputes.comments', 'additionalPayments']));
+        return new TenantAgreementResource($tenantAgreement->load(['tenant', 'properties', 'installments.allocations.transaction', 'disputes.comments', 'additionalPayments.accountTransaction']));
     }
 
-    public function update(UpdateTenantAgreementRequest $request, TenantAgreement $tenantAgreement, BranchContext $branchContext): TenantAgreementResource
+    public function update(UpdateTenantAgreementRequest $request, TenantAgreement $tenantAgreement, BranchContext $branchContext, PropertyAvailabilityService $availability): TenantAgreementResource
     {
         Gate::authorize('update', $tenantAgreement);
         $data = $request->validated();
         if (isset($data['tenant_customer_id'])) {
             $this->ensureTenantRole($branchContext->id(), $data['tenant_customer_id']);
         }
-        if (isset($data['properties'])) {
-            $this->ensureCoverage($branchContext->id(), $data['properties']);
-        }
-
-        DB::transaction(function () use ($data, $tenantAgreement, $branchContext) {
+        $before = $tenantAgreement->only(['agreement_no', 'tenant_customer_id', 'start_date', 'end_date', 'status', 'total_amount']);
+        DB::transaction(function () use ($data, $tenantAgreement, $branchContext, $availability, $before) {
             $properties = $data['properties'] ?? null;
+            $startDate = CarbonImmutable::parse($data['start_date'] ?? $tenantAgreement->start_date);
+            $endDate = CarbonImmutable::parse($data['end_date'] ?? $tenantAgreement->end_date);
+            if ($properties !== null || isset($data['start_date']) || isset($data['end_date'])) {
+                $properties ??= $tenantAgreement->properties->map(fn ($property) => [
+                    'property_id' => $property->id,
+                    'source_owner_agreement_id' => $property->pivot->source_owner_agreement_id,
+                ])->all();
+                $propertyIds = array_merge(
+                    $tenantAgreement->properties()->pluck('properties.id')->all(),
+                    array_column($properties, 'property_id'),
+                );
+                $lockedProperties = $availability->lockProperties($branchContext->id(), $propertyIds);
+                if (count($lockedProperties) !== count(array_unique(array_map('intval', $propertyIds)))) {
+                    throw new ApiException('PROPERTY_NOT_FOUND', 'One or more selected properties are not available in the active branch.', 404);
+                }
+                $availability->assertOwnerCoverage($branchContext->id(), $properties, $startDate, $endDate);
+                $availability->assertAvailable($branchContext->id(), array_column($properties, 'property_id'), $startDate, $endDate, $tenantAgreement->id);
+            }
             unset($data['properties']);
             $tenantAgreement->update($data);
             if ($properties !== null) {
@@ -89,36 +122,17 @@ class TenantAgreementController extends Controller
                 }
             }
             $tenantAgreement->increment('lock_version');
+            app(AuditService::class)->record('tenant_agreement.updated', $tenantAgreement, $before, $tenantAgreement->only(['agreement_no', 'tenant_customer_id', 'start_date', 'end_date', 'status', 'total_amount']));
         });
 
         return new TenantAgreementResource($tenantAgreement->refresh()->load(['tenant', 'properties']));
     }
 
-    public function destroy(DeleteAgreementRequest $request, TenantAgreement $tenantAgreement): TenantAgreementResource
+    public function destroy(DeleteAgreementRequest $request, TenantAgreement $tenantAgreement, BranchContext $branchContext, AgreementLifecycleService $lifecycle): TenantAgreementResource
     {
         Gate::authorize('delete', $tenantAgreement);
-        if ($tenantAgreement->status === 'terminated') {
-            throw new ApiException('RESOURCE_CONFLICT', 'The agreement is already terminated.', 409);
-        }
-
-        DB::transaction(function () use ($request, $tenantAgreement) {
-            $fromStatus = $tenantAgreement->status;
-            $tenantAgreement->forceFill([
-                'status' => 'terminated',
-                'terminated_at' => now(),
-                'terminated_by_user_id' => $request->user()->getAuthIdentifier(),
-                'termination_reason' => $request->validated()['reason'] ?? 'Terminated through API.',
-            ])->save();
-            $tenantAgreement->delete();
-            $tenantAgreement->statusHistory()->create([
-                'branch_id' => $tenantAgreement->branch_id,
-                'from_status' => $fromStatus,
-                'to_status' => 'terminated',
-                'action' => 'terminated',
-                'changed_by_user_id' => $request->user()->getAuthIdentifier(),
-                'reason' => $request->validated()['reason'] ?? null,
-            ]);
-        });
+        $action = in_array($tenantAgreement->status, ['draft', 'pending_approval', 'approved'], true) ? 'cancelled' : 'terminated';
+        $tenantAgreement = $lifecycle->transition('tenant', $tenantAgreement->id, $branchContext->id(), $action, $request->validated()['reason'] ?? null, $request->user()->getAuthIdentifier());
 
         return new TenantAgreementResource($tenantAgreement->refresh()->load(['tenant', 'properties']));
     }
@@ -136,20 +150,6 @@ class TenantAgreementController extends Controller
     {
         if (! CustomerRoleAssignment::query()->where('branch_id', $branchId)->where('customer_id', $customerId)->where('role', 'tenant')->exists()) {
             throw new ApiException('TENANT_ROLE_REQUIRED', 'The selected customer is not a tenant.', 422);
-        }
-    }
-
-    private function ensureCoverage(int $branchId, array $properties): void
-    {
-        foreach ($properties as $property) {
-            $covered = DB::table('owner_agreement_properties')
-                ->where('branch_id', $branchId)
-                ->where('property_id', $property['property_id'])
-                ->where('owner_agreement_id', $property['source_owner_agreement_id'])
-                ->exists();
-            if (! $covered) {
-                throw new ApiException('PROPERTY_COVERAGE_REQUIRED', 'Each tenant property must be covered by its source owner agreement.', 422);
-            }
         }
     }
 }
