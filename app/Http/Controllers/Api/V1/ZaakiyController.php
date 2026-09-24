@@ -15,7 +15,7 @@ class ZaakiyController extends Controller
     {
         $message = $request->string('message')->toString();
         $history = $request->input('history', []);
-        $verifiedContext = $context->build($message, $request->user());
+        $verifiedContext = $context->build($message, $request->user(), $history);
 
         return response()->stream(function () use ($message, $history, $verifiedContext, $zaakiy): void {
             try {
