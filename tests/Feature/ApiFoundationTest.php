@@ -4,8 +4,10 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -357,6 +359,70 @@ class ApiFoundationTest extends TestCase
         $this->actingAs($superAdmin, 'web');
         $this->patchJson('/api/v1/admin/users/'.$superAdmin->id.'/status', ['status' => 'suspended'])
             ->assertUnprocessable()->assertJsonPath('code', 'INVALID_USER_STATUS');
+    }
+
+    public function test_identity_document_extraction_verifies_customer_on_create_and_locks_the_id(): void
+    {
+        Http::fake(['*generativelanguage.googleapis.com*' => Http::response([
+            'candidates' => [['content' => ['parts' => [['text' => json_encode([
+                'display_name' => 'Ahmed Al Mansoori',
+                'identity_no' => '784-1990-1234567-1',
+                'country_code' => 'ARE',
+                'confidence' => ['display_name' => 0.98],
+                'warnings' => [],
+            ])]]]]],
+        ], 200)]);
+        $superAdmin = $this->superAdmin();
+        $this->actingAs($superAdmin, 'web');
+        $before = DB::table('customers')->count();
+
+        $response = $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->post('/api/v1/customers/identity-extract', [
+                'role' => 'owner',
+                'document' => UploadedFile::fake()->create('emirates-id.jpg', 100, 'image/jpeg'),
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.fields.display_name', 'Ahmed Al Mansoori')
+            ->assertJsonPath('data.fields.identity_no', '784-1990-1234567-1')
+            ->assertJsonPath('data.fields.country_code', 'AE');
+        $this->assertNotEmpty($response->json('data.verification_token'));
+
+        $customer = $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->postJson('/api/v1/customers', [
+                'customer_type' => 'individual',
+                'display_name' => 'Ahmed Al Mansoori',
+                'identity_no' => '784-1990-1234567-1',
+                'roles' => ['owner'],
+                'identity_verification_token' => $response->json('data.verification_token'),
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.identity_verified', true);
+
+        $this->assertSame($before + 1, DB::table('customers')->count());
+        $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->patchJson('/api/v1/customers/'.$customer->json('data.id'), ['identity_no' => '784-1991-7654321-1'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('identity_no');
+    }
+
+    public function test_customer_profile_returns_role_properties_agreements_and_authorized_transactions(): void
+    {
+        DB::table('customer_role_assignments')->insert(['branch_id' => $this->branchA, 'customer_id' => $this->customerA, 'role' => 'owner', 'created_at' => now(), 'updated_at' => now()]);
+        $property = DB::table('properties')->insertGetId(['branch_id' => $this->branchA, 'owner_customer_id' => $this->customerA, 'property_code' => 'A-PROFILE-001', 'property_type' => 'apartment', 'name' => 'Profile Flat', 'status' => 'active', 'created_at' => now(), 'updated_at' => now()]);
+        $agreement = DB::table('owner_agreements')->insertGetId(['branch_id' => $this->branchA, 'agreement_no' => 'OA-PROFILE-001', 'owner_customer_id' => $this->customerA, 'start_date' => '2026-01-01', 'end_date' => '2026-12-31', 'total_amount' => '12000.00', 'currency_code' => 'AED', 'payment_count' => 1, 'payment_mode' => 'cash', 'status' => 'commenced', 'lock_version' => 1, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('owner_agreement_properties')->insert(['branch_id' => $this->branchA, 'owner_agreement_id' => $agreement, 'property_id' => $property, 'owner_customer_id' => $this->customerA, 'created_at' => now(), 'updated_at' => now()]);
+        $installment = DB::table('owner_agreement_installments')->insertGetId(['branch_id' => $this->branchA, 'owner_agreement_id' => $agreement, 'installment_no' => 1, 'due_date' => '2026-01-01', 'amount' => '12000.00', 'paid_amount' => '0.00', 'payment_mode' => 'cash', 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
+        $transaction = DB::table('account_transactions')->insertGetId(['branch_id' => $this->branchA, 'document_no' => 'OUT-PROFILE-001', 'direction' => 'outward', 'transaction_date' => '2026-01-15', 'payment_mode' => 'cash', 'amount' => '5000.00', 'party_customer_id' => $this->customerA, 'source_type' => 'owner_agreement_payment', 'source_id' => $agreement, 'status' => 'posted', 'created_by' => $this->branchUser->id, 'posted_by' => $this->branchUser->id, 'posted_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('account_transaction_allocations')->insert(['branch_id' => $this->branchA, 'account_transaction_id' => $transaction, 'owner_agreement_installment_id' => $installment, 'amount' => '5000.00', 'created_at' => now(), 'updated_at' => now()]);
+
+        $this->actingAs($this->superAdmin(), 'web');
+        $this->withHeader('X-Branch-Id', (string) $this->branchA)->getJson('/api/v1/customers/'.$this->customerA.'/profile')
+            ->assertOk()
+            ->assertJsonPath('data.customer.id', $this->customerA)
+            ->assertJsonPath('data.profile.properties.0.property_code', 'A-PROFILE-001')
+            ->assertJsonPath('data.profile.agreements.owner.0.agreement_no', 'OA-PROFILE-001')
+            ->assertJsonPath('data.profile.transactions.data.0.document_no', 'OUT-PROFILE-001')
+            ->assertJsonPath('data.profile.financial_restricted', false);
     }
 
     private function superAdmin(): User

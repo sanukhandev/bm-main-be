@@ -39,6 +39,8 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::middleware(['api.json', 'auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
+        Route::post('/customers/identity-extract', [CustomerController::class, 'extractIdentity']);
+        Route::get('/customers/{customer}/profile', [CustomerController::class, 'profile']);
         Route::get('/dashboard/metrics', [DashboardController::class, 'metrics']);
         Route::get('/dashboard/operational', [DashboardController::class, 'operational']);
         Route::post('/ai/zaakiy/chat', [ZaakiyController::class, 'chat'])->middleware('throttle:api');
