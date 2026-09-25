@@ -45,4 +45,51 @@ class ReportsTest extends TestCase
     {
         $this->branchRequest()->getJson('/api/v1/reports/owner-agreements?date_from=2026-09-24&date_to=2026-09-23')->assertUnprocessable();
     }
+
+    public function test_dashboard_reports_and_intelligent_report_share_outstanding_and_occupancy_metrics(): void
+    {
+        $now = now();
+        DB::table('customer_role_assignments')->insert([
+            ['branch_id' => $this->branchA, 'customer_id' => $this->customerA, 'role' => 'tenant', 'created_at' => $now, 'updated_at' => $now],
+        ]);
+        $property = DB::table('properties')->insertGetId([
+            'branch_id' => $this->branchA, 'owner_customer_id' => $this->customerA, 'property_code' => 'A-PARITY-001',
+            'property_type' => 'apartment', 'name' => 'Parity Property', 'status' => 'active', 'created_at' => $now, 'updated_at' => $now,
+        ]);
+        $ownerAgreement = DB::table('owner_agreements')->insertGetId([
+            'branch_id' => $this->branchA, 'agreement_no' => 'OA-PARITY-001', 'owner_customer_id' => $this->customerA,
+            'start_date' => $now->toDateString(), 'end_date' => $now->copy()->addDays(10)->toDateString(), 'total_amount' => '1000.00',
+            'currency_code' => 'AED', 'payment_count' => 1, 'payment_mode' => 'cash', 'status' => 'commenced', 'lock_version' => 1,
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+        DB::table('owner_agreement_properties')->insert([
+            'branch_id' => $this->branchA, 'owner_agreement_id' => $ownerAgreement, 'property_id' => $property,
+            'owner_customer_id' => $this->customerA, 'created_at' => $now, 'updated_at' => $now,
+        ]);
+        $agreement = DB::table('tenant_agreements')->insertGetId([
+            'branch_id' => $this->branchA, 'agreement_no' => 'TA-PARITY-001', 'tenant_customer_id' => $this->customerA,
+            'start_date' => $now->toDateString(), 'end_date' => $now->copy()->addDays(10)->toDateString(), 'total_amount' => '1000.00',
+            'currency_code' => 'AED', 'payment_count' => 1, 'payment_mode' => 'cash', 'status' => 'commenced', 'lock_version' => 1,
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+        DB::table('tenant_agreement_properties')->insert([
+            'branch_id' => $this->branchA, 'tenant_agreement_id' => $agreement, 'property_id' => $property,
+            'source_owner_agreement_id' => $ownerAgreement, 'created_at' => $now, 'updated_at' => $now,
+        ]);
+        DB::table('tenant_agreement_installments')->insert([
+            'branch_id' => $this->branchA, 'tenant_agreement_id' => $agreement, 'installment_no' => 1, 'due_date' => $now->toDateString(),
+            'amount' => '1000.00', 'paid_amount' => '250.00', 'payment_mode' => 'cash', 'status' => 'partially_paid',
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+
+        $dashboard = $this->branchRequest()->getJson('/api/v1/dashboard/operational')->assertOk();
+        $reports = $this->branchRequest()->getJson('/api/v1/reports/tenant-outstanding')->assertOk();
+        $intelligent = $this->branchRequest()->getJson('/api/v1/reports/intelligent?period=this_month')->assertOk();
+
+        $dashboard->assertJsonPath('data.financial_attention.tenant_receivables', '750.00')
+            ->assertJsonPath('data.occupancy.occupied_properties', 1);
+        $reports->assertJsonPath('meta.summary.total_outstanding', 750);
+        $intelligent->assertJsonPath('data.summary.tenant_receivables', '750.00')
+            ->assertJsonPath('data.summary.occupied_properties', 1);
+    }
 }

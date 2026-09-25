@@ -4,13 +4,17 @@ namespace App\Services;
 
 use App\Enums\ChequeStatus;
 use App\Services\Reports\AgreementOccupancyQuery;
+use App\Services\Reports\AgreementOutstandingQuery;
 use Illuminate\Support\Facades\DB;
 
 class OperationalDashboardService
 {
     private const ACTIVE_AGREEMENT_STATUSES = ['approved', 'commenced', 'on_hold'];
 
-    public function __construct(private readonly AgreementOccupancyQuery $occupancy)
+    public function __construct(
+        private readonly AgreementOccupancyQuery $occupancy,
+        private readonly AgreementOutstandingQuery $outstanding,
+    )
     {
     }
 
@@ -92,17 +96,17 @@ class OperationalDashboardService
 
     private function financialAttention(int $branchId, string $today): array
     {
-        $outstanding = fn (string $table) => number_format((float) DB::table($table)->where('branch_id', $branchId)
-            ->whereIn('status', ['pending', 'partially_paid'])->selectRaw('COALESCE(SUM(amount - paid_amount), 0) as total')->value('total'), 2, '.', '');
-        $overdue = DB::table('tenant_agreement_installments')->where('branch_id', $branchId)->where('due_date', '<', $today)
-            ->whereIn('status', ['pending', 'partially_paid'])->whereColumn('paid_amount', '<', 'amount');
+        $outstanding = fn (string $type) => number_format((float) $this->outstanding->unpaid([$branchId], $type)
+            ->whereIn('installments.status', ['pending', 'partially_paid'])->sum(DB::raw('installments.amount - installments.paid_amount')), 2, '.', '');
+        $overdue = $this->outstanding->unpaid([$branchId], 'tenant')->where('installments.due_date', '<', $today)
+            ->whereIn('installments.status', ['pending', 'partially_paid']);
         $cheques = DB::table('account_transactions')->where('branch_id', $branchId)->where('status', 'posted')->where('payment_mode', 'cheque')
             ->whereIn('cheque_status', [ChequeStatus::Received->value, ChequeStatus::Deposited->value]);
 
         return [
-            'tenant_receivables' => $outstanding('tenant_agreement_installments'),
-            'owner_payables' => $outstanding('owner_agreement_installments'),
-            'overdue_tenant_installments' => ['count' => $overdue->count(), 'amount' => number_format((float) $overdue->selectRaw('COALESCE(SUM(amount - paid_amount), 0) as total')->value('total'), 2, '.', '')],
+            'tenant_receivables' => $outstanding('tenant'),
+            'owner_payables' => $outstanding('owner'),
+            'overdue_tenant_installments' => ['count' => $overdue->count(), 'amount' => number_format((float) $overdue->sum(DB::raw('installments.amount - installments.paid_amount')), 2, '.', '')],
             'pending_cheques' => ['count' => (clone $cheques)->count(), 'value' => number_format((float) (clone $cheques)->sum('amount'), 2, '.', '')],
         ];
     }
