@@ -24,6 +24,7 @@ use App\Models\WorkOrder;
 use App\Models\WorkOrderPayment;
 use App\Services\AuditService;
 use App\Services\PaymentModeDetails;
+use App\Services\PaymentLineState;
 use App\Services\VendorService;
 use App\Support\Branch\BranchContext;
 use Illuminate\Http\Request;
@@ -126,9 +127,7 @@ class MaintenanceController extends Controller
     {
         WorkOrder::query()->forBranch($context->id())->findOrFail($workOrder);
         $line = WorkOrderPayment::query()->where('branch_id', $context->id())->where('work_order_id', $workOrder)->findOrFail($payment);
-        if ($line->status === 'paid' && $request->validated('status') !== 'paid') {
-            throw new ApiException('FINANCIAL_RECORD_IMMUTABLE', 'Posted payment lines must be voided through their financial transaction.', 409);
-        }
+        PaymentLineState::assertCanChange($line->status, $request->validated('status'));
         if ($request->validated('status') === 'paid') {
             return ['data' => $action->execute($line, $context->branch(), $request->user()->getAuthIdentifier(), $request->header('Idempotency-Key'))];
         }
