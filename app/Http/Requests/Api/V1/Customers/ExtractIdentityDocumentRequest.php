@@ -14,7 +14,7 @@ class ExtractIdentityDocumentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'role' => ['required', 'in:owner,tenant'],
+            'role' => ['required', 'in:owner,tenant,vendor'],
             'document' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
         ];
     }

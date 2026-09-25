@@ -31,6 +31,7 @@ class DocumentNumberGenerator
         $prefix = match ($documentType) {
             'OWNER_CUSTOMER' => 'OWN',
             'TENANT_CUSTOMER' => 'TEN',
+            'VENDOR_CUSTOMER' => 'VEN',
             'OWNER_AGREEMENT' => 'OA',
             'TENANT_AGREEMENT' => 'TA',
             'INWARD_RECEIPT' => 'IR',

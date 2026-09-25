@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api\Customers;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Schema;
 use Tests\Support\ApiScenario;
 use Tests\TestCase;
 
@@ -84,5 +85,25 @@ class CustomerBoundaryTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $this->customerA);
+    }
+
+    public function test_vendors_are_customer_records_and_legacy_directory_uses_them(): void
+    {
+        $vendor = $this->branchRequest()->postJson('/api/v1/customers', [
+            'customer_type' => 'organization',
+            'display_name' => 'A Maintenance Vendor',
+            'phone' => '+971 50 111 2233',
+            'roles' => ['vendor'],
+        ])->assertCreated()->json('data');
+
+        $this->assertSame('E2E-A-VEN-'.now()->format('Y').'-000001', $vendor['customer_code']);
+        $this->assertSame(['vendor'], $vendor['roles']);
+        $this->assertDatabaseHas('customer_role_assignments', ['customer_id' => $vendor['id'], 'role' => 'vendor']);
+        $this->assertFalse(Schema::hasTable('vendors'));
+
+        $this->branchRequest()->getJson('/api/v1/maintenance/vendors')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $vendor['id'])
+            ->assertJsonPath('data.0.name', 'A Maintenance Vendor');
     }
 }

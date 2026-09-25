@@ -48,6 +48,10 @@ class AgreementOperationsController extends Controller
             default => abort(404),
         };
 
+        $result->load($type === 'owner'
+            ? ['owner', 'properties', 'installments.allocations.transaction', 'disputes.comments', 'additionalPayments.accountTransaction']
+            : ['tenant', 'properties', 'installments.allocations.transaction', 'disputes.comments', 'additionalPayments.accountTransaction']);
+
         return ['data' => $type === 'owner' ? new OwnerAgreementResource($result) : new TenantAgreementResource($result)];
     }
 

@@ -17,11 +17,14 @@ use App\Http\Resources\Api\V1\InventoryItemResource;
 use App\Http\Resources\Api\V1\VendorResource;
 use App\Http\Resources\Api\V1\WorkOrderPaymentResource;
 use App\Http\Resources\Api\V1\WorkOrderResource;
+use App\Models\Customer;
+use App\Models\CustomerRoleAssignment;
 use App\Models\InventoryItem;
 use App\Models\StockMovement;
-use App\Models\Vendor;
 use App\Models\WorkOrder;
 use App\Models\WorkOrderPayment;
+use App\Services\AuditService;
+use App\Services\DocumentNumberGenerator;
 use App\Services\PaymentModeDetails;
 use App\Support\Branch\BranchContext;
 use Illuminate\Http\Request;
@@ -31,27 +34,42 @@ class MaintenanceController extends Controller
 {
     public function vendors(Request $request, BranchContext $context)
     {
-        return VendorResource::collection(Vendor::query()->forBranch($context->id())->when($request->query('search'), fn ($q, $v) => $q->where('name', 'like', "%{$v}%"))->latest()->paginate(25));
+        $query = Customer::query()->forBranch($context->id())->with('businessRoles')->whereHas('businessRoles', fn ($roles) => $roles->where('role', 'vendor'))
+            ->when($request->query('search'), fn ($q, $v) => $q->where(fn ($search) => $search->where('display_name', 'like', "%{$v}%")->orWhere('phone', 'like', "%{$v}%")->orWhere('email', 'like', "%{$v}%")))
+            ->latest();
+
+        return VendorResource::collection($query->paginate(25));
     }
 
-    public function storeVendor(StoreVendorRequest $request, BranchContext $context)
+    public function storeVendor(StoreVendorRequest $request, BranchContext $context, DocumentNumberGenerator $numbers, AuditService $audit)
     {
-        $vendor = Vendor::query()->create(['branch_id' => $context->id(), ...$request->validated()]);
+        $data = $request->validated();
+        $vendor = DB::transaction(function () use ($data, $context, $numbers, $audit, $request) {
+            $customer = new Customer(['customer_code' => $numbers->next($context->branch(), 'VENDOR_CUSTOMER', (int) now()->format('Y')), 'customer_type' => $data['customer_type'] ?? 'organization', 'display_name' => $data['name'], 'phone' => $data['phone'] ?? null, 'email' => $data['email'] ?? null]);
+            $customer->forceFill(['branch_id' => $context->id(), 'status' => $data['status'] ?? 'active'])->save();
+            CustomerRoleAssignment::query()->create(['branch_id' => $context->id(), 'customer_id' => $customer->id, 'role' => 'vendor']);
+            $audit->record('customer.created', $customer, null, ['customer_code' => $customer->customer_code, 'display_name' => $customer->display_name, 'roles' => ['vendor']], [], $context->id(), $request->user()->getAuthIdentifier());
+
+            return $customer->load('businessRoles');
+        });
 
         return new VendorResource($vendor);
     }
 
-    public function updateVendor(StoreVendorRequest $request, int $vendor, BranchContext $context)
+    public function updateVendor(StoreVendorRequest $request, int $vendor, BranchContext $context, AuditService $audit)
     {
-        $record = Vendor::query()->forBranch($context->id())->findOrFail($vendor);
-        $record->update($request->validated());
+        $record = Customer::query()->forBranch($context->id())->whereHas('businessRoles', fn ($roles) => $roles->where('role', 'vendor'))->findOrFail($vendor);
+        $data = $request->validated();
+        $before = $record->only(['display_name', 'phone', 'email', 'status']);
+        $record->update(['display_name' => $data['name'], 'phone' => $data['phone'] ?? null, 'email' => $data['email'] ?? null, 'status' => $data['status'] ?? $record->status]);
+        $audit->record('customer.updated', $record, [...$before, 'role' => 'vendor'], [...$record->only(['display_name', 'phone', 'email', 'status']), 'role' => 'vendor'], [], $context->id(), request()->user()->getAuthIdentifier());
 
         return new VendorResource($record->refresh());
     }
 
     public function deleteVendor(int $vendor, BranchContext $context)
     {
-        Vendor::query()->forBranch($context->id())->findOrFail($vendor)->update(['status' => 'inactive']);
+        Customer::query()->forBranch($context->id())->whereHas('businessRoles', fn ($roles) => $roles->where('role', 'vendor'))->findOrFail($vendor)->update(['status' => 'inactive']);
 
         return response()->noContent();
     }

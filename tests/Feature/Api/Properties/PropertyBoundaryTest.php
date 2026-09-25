@@ -60,6 +60,42 @@ class PropertyBoundaryTest extends TestCase
             ->assertNotFound()->assertJsonPath('code', 'RESOURCE_NOT_FOUND');
     }
 
+    public function test_property_profile_returns_server_derived_agreement_actions(): void
+    {
+        $property = $this->branchRequest()->postJson('/api/v1/properties', [
+            'owner_customer_id' => $this->customerA,
+            'property_code' => 'PROFILE-001',
+            'property_type' => 'apartment',
+            'name' => 'Profile Property',
+        ])->assertCreated()->json('data');
+
+        $this->branchRequest()->getJson('/api/v1/properties/'.$property['id'].'/profile')
+            ->assertOk()
+            ->assertJsonPath('data.property.id', $property['id'])
+            ->assertJsonPath('data.profile.actions.can_create_owner_agreement', true)
+            ->assertJsonPath('data.profile.actions.can_create_tenant_agreement', false)
+            ->assertJsonPath('data.profile.owner_agreements', [])
+            ->assertJsonPath('data.profile.tenant_agreements', [])
+            ->assertJsonPath('data.profile.work_orders', []);
+    }
+
+    public function test_property_profile_is_hidden_across_branch_boundaries(): void
+    {
+        $propertyId = $this->app['db']->table('properties')->insertGetId([
+            'branch_id' => $this->branchB,
+            'owner_customer_id' => $this->customerB,
+            'property_code' => 'PROFILE-B-001',
+            'property_type' => 'shop',
+            'name' => 'Branch B Profile Property',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->branchRequest()->getJson('/api/v1/properties/'.$propertyId.'/profile')
+            ->assertNotFound()->assertJsonPath('code', 'RESOURCE_NOT_FOUND');
+    }
+
     public function test_property_delete_is_soft_delete_only(): void
     {
         $property = $this->branchRequest()->postJson('/api/v1/properties', [

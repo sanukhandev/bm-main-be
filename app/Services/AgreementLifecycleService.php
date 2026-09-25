@@ -36,19 +36,19 @@ class AgreementLifecycleService
             if ($type === 'tenant' && in_array($to, [AgreementStatus::Approved->value, AgreementStatus::Commenced->value], true)) {
                 $this->assertComplete($type, $agreement, $branchId);
             }
-            if ($to === AgreementStatus::Commenced->value && $this->today($branchId)->lt(CarbonImmutable::parse($agreement->start_date))) {
+            if ($to === AgreementStatus::Commenced->value && $this->today($branchId)->lt($this->agreementDate($agreement->start_date, $branchId))) {
                 throw new ApiException('AGREEMENT_CANNOT_COMMENCE', 'An agreement cannot commence before its start date.', 409);
             }
-            if ($to === AgreementStatus::Commenced->value && $this->today($branchId)->gt(CarbonImmutable::parse($agreement->end_date))) {
+            if ($to === AgreementStatus::Commenced->value && $this->today($branchId)->gt($this->agreementDate($agreement->end_date, $branchId))) {
                 throw new ApiException('AGREEMENT_CANNOT_COMMENCE', 'An agreement cannot commence after its end date.', 409);
             }
-            if ($to === AgreementStatus::Cancelled->value && $agreement->status === AgreementStatus::Approved->value && $this->today($branchId)->gte(CarbonImmutable::parse($agreement->start_date))) {
+            if ($to === AgreementStatus::Cancelled->value && $agreement->status === AgreementStatus::Approved->value && $this->today($branchId)->gte($this->agreementDate($agreement->start_date, $branchId))) {
                 throw new ApiException('INVALID_STATUS_TRANSITION', 'An approved agreement cannot be cancelled after its start date.', 409);
             }
-            if ($to === AgreementStatus::Commenced->value && $agreement->status === AgreementStatus::OnHold->value && $this->today($branchId)->gt(CarbonImmutable::parse($agreement->end_date))) {
+            if ($to === AgreementStatus::Commenced->value && $agreement->status === AgreementStatus::OnHold->value && $this->today($branchId)->gt($this->agreementDate($agreement->end_date, $branchId))) {
                 throw new ApiException('INVALID_STATUS_TRANSITION', 'An expired agreement cannot be resumed.', 409);
             }
-            if (in_array($to, [AgreementStatus::Expired->value], true) && $this->today($branchId)->lte(CarbonImmutable::parse($agreement->end_date))) {
+            if (in_array($to, [AgreementStatus::Expired->value], true) && $this->today($branchId)->lte($this->agreementDate($agreement->end_date, $branchId))) {
                 throw new ApiException('INVALID_STATUS_TRANSITION', 'The agreement period has not ended.', 409);
             }
 
@@ -66,8 +66,8 @@ class AgreementLifecycleService
     {
         return DB::transaction(function () use ($type, $id, $branchId, $newEndDate, $reason, $userId) {
             $agreement = $this->query($type)->forBranch($branchId)->lockForUpdate()->findOrFail($id);
-            $newEnd = CarbonImmutable::parse($newEndDate);
-            $oldEnd = CarbonImmutable::parse($agreement->end_date);
+            $newEnd = $this->agreementDate($newEndDate, $branchId);
+            $oldEnd = $this->agreementDate($agreement->end_date, $branchId);
             if ($newEnd->lte($oldEnd)) {
                 throw new ApiException('AGREEMENT_CANNOT_EXTEND', 'The new end date must be later than the current end date.', 422);
             }
@@ -95,7 +95,7 @@ class AgreementLifecycleService
                 if ($today->gt($newEnd)) {
                     throw new ApiException('AGREEMENT_CANNOT_EXTEND', 'The new end date must reach the current business date.', 409);
                 }
-                $to = $today->lt(CarbonImmutable::parse($agreement->start_date)) ? AgreementStatus::Approved->value : AgreementStatus::Commenced->value;
+                $to = $today->lt($this->agreementDate($agreement->start_date, $branchId)) ? AgreementStatus::Approved->value : AgreementStatus::Commenced->value;
             }
             $agreement->forceFill(['end_date' => $newEnd->toDateString(), 'status' => $to, 'expired_at' => null])->save();
             $agreement->increment('lock_version');
@@ -111,9 +111,9 @@ class AgreementLifecycleService
     {
         return DB::transaction(function () use ($type, $id, $branchId, $data, $branch, $numbers, $schedules, $userId) {
             $source = $this->query($type)->forBranch($branchId)->lockForUpdate()->findOrFail($id);
-            $start = CarbonImmutable::parse($data['start_date']);
-            $end = CarbonImmutable::parse($data['end_date']);
-            if ($end->lt($start) || $start->lte(CarbonImmutable::parse($source->end_date))) {
+            $start = $this->agreementDate($data['start_date'], $branchId);
+            $end = $this->agreementDate($data['end_date'], $branchId);
+            if ($end->lt($start) || $start->lte($this->agreementDate($source->end_date, $branchId))) {
                 throw new ApiException('AGREEMENT_CANNOT_RENEW', 'A renewal must start after the original agreement period.', 422);
             }
 
@@ -152,7 +152,7 @@ class AgreementLifecycleService
         return match ($agreement->status) {
             'draft' => ['submit', 'cancel'],
             'pending_approval' => ['approve', 'cancel'],
-            'approved' => $this->today($branchId)->gte(CarbonImmutable::parse($agreement->start_date)) ? ['commence', 'cancel'] : ['cancel'],
+            'approved' => $this->today($branchId)->gte($this->agreementDate($agreement->start_date, $branchId)) ? ['commence', 'cancel'] : ['cancel'],
             'commenced' => ['hold', 'terminate', 'extend'],
             'on_hold' => ['resume', 'terminate', 'extend'],
             'expired' => ['extend', 'renew'],
@@ -224,6 +224,14 @@ class AgreementLifecycleService
         $branch = Branch::query()->findOrFail($branchId);
 
         return CarbonImmutable::today($branch->timezone ?: config('app.timezone'));
+    }
+
+    private function agreementDate($date, int $branchId): CarbonImmutable
+    {
+        $branch = Branch::query()->findOrFail($branchId);
+        $dateValue = $date instanceof \DateTimeInterface ? $date->format('Y-m-d') : (string) $date;
+
+        return CarbonImmutable::parse($dateValue, $branch->timezone ?: config('app.timezone'))->startOfDay();
     }
 
     private function actionFor(string $to): string

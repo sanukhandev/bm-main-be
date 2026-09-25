@@ -111,10 +111,12 @@ class OperationalDashboardService
     private function maintenance(int $branchId): array
     {
         $rows = DB::table('work_orders as orders')->join('properties', 'properties.id', '=', 'orders.property_id')
-            ->leftJoin('vendors', 'vendors.id', '=', 'orders.vendor_id')->where('orders.branch_id', $branchId)
+            ->leftJoin('customers as vendors', function ($join) use ($branchId): void {
+                $join->on('vendors.id', '=', 'orders.vendor_id')->where('vendors.branch_id', $branchId);
+            })->where('orders.branch_id', $branchId)
             ->whereNotIn('orders.status', ['completed', 'cancelled'])->orderByDesc('orders.created_at')->limit(5)->get([
                 'orders.id', 'orders.work_order_no', 'orders.title', 'orders.priority', 'orders.status', 'orders.created_at',
-                'properties.name as property_name', 'vendors.name as vendor_name',
+                'properties.name as property_name', 'vendors.display_name as vendor_name',
             ]);
 
         return ['open_work_orders' => DB::table('work_orders')->where('branch_id', $branchId)->whereNotIn('status', ['completed', 'cancelled'])->count(), 'items' => $rows];

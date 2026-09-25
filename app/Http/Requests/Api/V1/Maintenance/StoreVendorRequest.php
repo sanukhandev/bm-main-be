@@ -13,6 +13,6 @@ class StoreVendorRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['name' => ['required', 'string', 'max:180'], 'phone' => ['nullable', 'string', 'max:50'], 'email' => ['nullable', 'email', 'max:255'], 'status' => ['nullable', 'in:active,inactive']];
+        return ['name' => ['required', 'string', 'max:180'], 'customer_type' => ['nullable', 'in:individual,organization'], 'phone' => ['nullable', 'string', 'max:50'], 'email' => ['nullable', 'email', 'max:255'], 'status' => ['nullable', 'in:active,inactive']];
     }
 }

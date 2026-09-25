@@ -43,10 +43,10 @@ class AgreementBoundaryTest extends TestCase
             'start_date' => '2026-01-01',
             'end_date' => '2026-12-31',
             'total_amount' => '12000.00',
-            'currency_code' => 'AED',
             'payment_count' => 12,
             'payment_mode' => 'bank_transfer',
         ])->assertCreated()->json('data');
+        $this->assertSame('AED', $owner['currency_code']);
 
         $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
             'agreement_no' => 'TA-BAD',
@@ -73,10 +73,10 @@ class AgreementBoundaryTest extends TestCase
             'start_date' => '2026-01-01',
             'end_date' => '2026-12-31',
             'total_amount' => '24000.00',
-            'currency_code' => 'AED',
             'payment_count' => 12,
             'payment_mode' => 'cash',
         ])->assertCreated()->json('data');
+        $this->assertSame('AED', $tenant['currency_code']);
 
         $this->branchRequest()->deleteJson('/api/v1/tenant-agreements/'.$tenant['id'], ['reason' => 'Closed'])
             ->assertOk()->assertJsonPath('data.status', 'cancelled');

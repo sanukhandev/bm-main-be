@@ -15,8 +15,10 @@ use App\Models\CustomerRoleAssignment;
 use App\Models\Property;
 use App\Services\AuditService;
 use App\Services\PropertyAvailabilityService;
+use App\Services\PropertyProfileService;
 use App\Support\Branch\BranchContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -104,6 +106,18 @@ class PropertyController extends Controller
         Gate::authorize('view', $property);
 
         return new PropertyResource($property->load('owner'));
+    }
+
+    public function profile(Property $property, Request $request, PropertyProfileService $profileService): array
+    {
+        Gate::authorize('view', $property);
+
+        return [
+            'data' => [
+                'property' => (new PropertyResource($property->load('owner')))->resolve(),
+                'profile' => $profileService->build($property, $request->user()->hasPermission('accounts.view', $property->branch_id)),
+            ],
+        ];
     }
 
     public function update(UpdatePropertyRequest $request, Property $property, BranchContext $branchContext): PropertyResource

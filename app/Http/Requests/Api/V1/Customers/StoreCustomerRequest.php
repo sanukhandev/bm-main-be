@@ -42,7 +42,7 @@ class StoreCustomerRequest extends FormRequest
             'country_code' => ['nullable', 'string', 'size:2'],
             'notes' => ['nullable', 'string'],
             'roles' => ['sometimes', 'array', 'min:1'],
-            'roles.*' => ['required', 'in:owner,tenant', 'distinct'],
+            'roles.*' => ['required', 'in:owner,tenant,vendor', 'distinct'],
         ];
     }
 }
