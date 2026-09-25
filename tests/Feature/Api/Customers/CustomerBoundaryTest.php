@@ -106,4 +106,19 @@ class CustomerBoundaryTest extends TestCase
             ->assertJsonPath('data.0.id', $vendor['id'])
             ->assertJsonPath('data.0.name', 'A Maintenance Vendor');
     }
+
+    public function test_legacy_vendor_creation_uses_the_customer_vendor_record(): void
+    {
+        $legacy = $this->branchRequest()->postJson('/api/v1/maintenance/vendors', [
+            'name' => 'Legacy Vendor',
+            'customer_type' => 'organization',
+            'phone' => '+971 50 999 8877',
+        ])->assertCreated()->json('data');
+
+        $this->assertSame('Legacy Vendor', $legacy['name']);
+        $this->branchRequest()->getJson('/api/v1/customers/'.$legacy['id'])
+            ->assertOk()
+            ->assertJsonPath('data.display_name', 'Legacy Vendor')
+            ->assertJsonPath('data.roles.0', 'vendor');
+    }
 }

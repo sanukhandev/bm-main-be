@@ -75,6 +75,24 @@ class AgreementLifecycleTest extends TestCase
         $this->action('owner', $owner['id'], 'commence')->assertOk()->assertJsonPath('data.status', 'commenced');
     }
 
+    public function test_generic_status_route_and_explicit_actions_share_lifecycle_rules(): void
+    {
+        $owner = $this->createOwner();
+
+        $this->branchRequest()->patchJson('/api/v1/owner-agreements/'.$owner['id'].'/status', ['status' => 'pending_approval'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'pending_approval');
+        $this->action('owner', $owner['id'], 'approve')->assertJsonPath('data.status', 'approved');
+        $this->branchRequest()->patchJson('/api/v1/owner-agreements/'.$owner['id'].'/status', ['status' => 'commenced'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'commenced');
+
+        $invalid = $this->createOwner();
+        $this->branchRequest()->patchJson('/api/v1/owner-agreements/'.$invalid['id'].'/status', ['status' => 'approved'])
+            ->assertStatus(409)
+            ->assertJsonPath('code', 'INVALID_STATUS_TRANSITION');
+    }
+
     public function test_arbitrary_approval_and_locked_edits_are_rejected(): void
     {
         $owner = $this->createOwner();
