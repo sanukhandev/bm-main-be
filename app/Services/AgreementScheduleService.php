@@ -4,6 +4,7 @@ namespace App\Services;
 
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use App\Support\DecimalAmount;
 
 class AgreementScheduleService
 {
@@ -11,7 +12,7 @@ class AgreementScheduleService
     {
         $table = $type === 'owner' ? 'owner_agreement_installments' : 'tenant_agreement_installments';
         $foreignKey = $type === 'owner' ? 'owner_agreement_id' : 'tenant_agreement_id';
-        $totalCents = $this->cents((string) $total);
+        $totalCents = DecimalAmount::toCents((string) $total);
         $base = intdiv($totalCents, $count);
         $remainder = $totalCents - ($base * $count);
         $date = CarbonImmutable::parse($startDate);
@@ -40,10 +41,4 @@ class AgreementScheduleService
         }
     }
 
-    private function cents(string $amount): int
-    {
-        [$whole, $fraction] = array_pad(explode('.', $amount, 2), 2, '0');
-
-        return ((int) $whole * 100) + (int) str_pad(substr($fraction, 0, 2), 2, '0');
-    }
 }

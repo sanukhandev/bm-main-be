@@ -9,6 +9,7 @@ use App\Models\Branch;
 use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use App\Services\PaymentModeDetails;
+use App\Support\DecimalAmount;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -43,8 +44,8 @@ class PostAgreementPayment
                     throw new ApiException('PAYMENT_ALREADY_POSTED', 'This installment has no outstanding balance.', 422);
                 }
             }
-            $amountCents = $this->cents((string) $data['amount']);
-            $outstandingCents = $installments->sum(fn ($row) => $this->cents((string) $row->amount) - $this->cents((string) $row->paid_amount));
+            $amountCents = DecimalAmount::toCents((string) $data['amount']);
+            $outstandingCents = $installments->sum(fn ($row) => DecimalAmount::toCents((string) $row->amount) - DecimalAmount::toCents((string) $row->paid_amount));
             if ($amountCents < 1) {
                 throw new ApiException('INVALID_PAYMENT_AMOUNT', 'Payment amount must be greater than zero.', 422);
             }
@@ -90,10 +91,10 @@ class PostAgreementPayment
                 if ($remaining === 0) {
                     break;
                 }
-                $balance = $this->cents((string) $installment->amount) - $this->cents((string) $installment->paid_amount);
+                $balance = DecimalAmount::toCents((string) $installment->amount) - DecimalAmount::toCents((string) $installment->paid_amount);
                 $allocated = min($remaining, $balance);
                 DB::table($installmentTable)->where('id', $installment->id)->update([
-                    'paid_amount' => number_format(($this->cents((string) $installment->paid_amount) + $allocated) / 100, 2, '.', ''),
+                    'paid_amount' => number_format((DecimalAmount::toCents((string) $installment->paid_amount) + $allocated) / 100, 2, '.', ''),
                     'status' => $allocated === $balance ? 'paid' : 'partially_paid',
                     'updated_at' => now(),
                 ]);
@@ -112,10 +113,4 @@ class PostAgreementPayment
         });
     }
 
-    private function cents(string $amount): int
-    {
-        [$whole, $fraction] = array_pad(explode('.', $amount, 2), 2, '0');
-
-        return ((int) $whole * 100) + (int) str_pad(substr($fraction, 0, 2), 2, '0');
-    }
 }
