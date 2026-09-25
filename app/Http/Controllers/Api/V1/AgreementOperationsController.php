@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\PostAdditionalAgreementPayment;
-use App\Actions\TransitionAgreement;
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Agreements\LifecycleActionRequest;
@@ -55,13 +54,13 @@ class AgreementOperationsController extends Controller
         return ['data' => $type === 'owner' ? new OwnerAgreementResource($result) : new TenantAgreementResource($result)];
     }
 
-    public function transition(TransitionAgreementRequest $request, string $type, int $agreement, BranchContext $context, TransitionAgreement $action)
+    public function transition(TransitionAgreementRequest $request, string $type, int $agreement, BranchContext $context, AgreementLifecycleService $lifecycle)
     {
         $model = $type === 'owner' ? OwnerAgreement::class : TenantAgreement::class;
         $record = $model::query()->forBranch($context->id())->findOrFail($agreement);
         Gate::authorize('view', $record);
 
-        return ['data' => $action->execute($type, $agreement, $context->id(), $request->validated('status'), $request->validated('reason'), $request->user()->getAuthIdentifier())];
+        return ['data' => $lifecycle->transition($type, $agreement, $context->id(), $request->validated('status'), $request->validated('reason'), $request->user()->getAuthIdentifier())];
     }
 
     public function disputes(StoreAgreementDisputeRequest $request, string $type, int $agreement, BranchContext $context)
