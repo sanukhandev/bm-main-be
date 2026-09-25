@@ -36,6 +36,25 @@ class IntelligentReportTest extends TestCase
         $this->actingAs($this->apiUser)->branchRequest()->getJson('/api/v1/reports/intelligent?period=this_month&scope=overall')->assertForbidden();
     }
 
+    public function test_super_admin_overall_scope_is_explicit_and_aggregates_authorized_branches(): void
+    {
+        DB::table('user_global_roles')->insert([
+            'user_id' => $this->apiUser->id,
+            'role_id' => DB::table('roles')->where('key', 'super_admin')->value('id'),
+        ]);
+        DB::table('account_transactions')->insert([
+            ['branch_id' => $this->branchA, 'document_no' => 'IR-ALL-A', 'direction' => 'inward', 'transaction_date' => now()->toDateString(), 'payment_mode' => 'cash', 'amount' => '100.00', 'source_type' => 'manual', 'status' => 'posted', 'created_by' => $this->apiUser->id, 'posted_by' => $this->apiUser->id, 'posted_at' => now(), 'created_at' => now(), 'updated_at' => now()],
+            ['branch_id' => $this->branchB, 'document_no' => 'IR-ALL-B', 'direction' => 'inward', 'transaction_date' => now()->toDateString(), 'payment_mode' => 'cash', 'amount' => '200.00', 'source_type' => 'manual', 'status' => 'posted', 'created_by' => $this->apiUser->id, 'posted_by' => $this->apiUser->id, 'posted_at' => now(), 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $this->actingAs($this->apiUser)->branchRequest($this->branchA)
+            ->getJson('/api/v1/reports/intelligent?period=this_month&scope=overall')
+            ->assertOk()
+            ->assertJsonPath('data.scope.type', 'overall')
+            ->assertJsonPath('data.summary.total_inward', '300.00')
+            ->assertJsonCount(2, 'data.branch_comparison');
+    }
+
     public function test_pdf_uses_the_same_authorized_report_scope(): void
     {
         $response = $this->actingAs($this->apiUser)->branchRequest()->get('/api/v1/reports/intelligent/pdf?period=this_month');
