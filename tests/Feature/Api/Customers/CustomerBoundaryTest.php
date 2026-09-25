@@ -75,4 +75,14 @@ class CustomerBoundaryTest extends TestCase
         $this->assertSame("E2E-A-OWN-{$year}-000001", $owner['customer_code']);
         $this->assertSame("E2E-A-TEN-{$year}-000001", $tenant['customer_code']);
     }
+
+    public function test_customer_search_matches_phone_numbers_without_formatting_spaces(): void
+    {
+        $this->app['db']->table('customers')->where('id', $this->customerA)->update(['phone' => '+971 50 123 4567']);
+
+        $this->branchRequest()->getJson('/api/v1/customers?search=%2B971501234567')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $this->customerA);
+    }
 }

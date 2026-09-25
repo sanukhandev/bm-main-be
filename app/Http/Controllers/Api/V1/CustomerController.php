@@ -44,11 +44,14 @@ class CustomerController extends Controller
 
         if (! empty($filters['search'])) {
             $search = $filters['search'];
-            $query->where(function ($query) use ($search) {
+            $phoneSearch = preg_replace('/\D+/', '', $search) ?? '';
+            $query->where(function ($query) use ($search, $phoneSearch) {
                 $query->where('display_name', 'like', "%{$search}%")
                     ->orWhere('customer_code', 'like', "%{$search}%")
-                    ->orWhere('phone', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%");
+                if ($phoneSearch !== '') {
+                    $query->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ?", ["%{$phoneSearch}%"]);
+                }
             });
         }
 

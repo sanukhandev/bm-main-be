@@ -79,7 +79,9 @@ class AgreementOperationsController extends Controller
     public function additionalPayment(StoreAdditionalPaymentRequest $request, string $type, int $agreement, BranchContext $context)
     {
         $this->agreement($type, $agreement, $context);
-        $payment = AgreementAdditionalPayment::query()->create(['branch_id' => $context->id(), 'owner_agreement_id' => $type === 'owner' ? $agreement : null, 'tenant_agreement_id' => $type === 'tenant' ? $agreement : null, 'created_by' => $request->user()->getAuthIdentifier(), ...PaymentModeDetails::normalize($request->validated())]);
+        $data = $request->validated();
+        $data['direction'] = $type === 'owner' ? 'outward' : 'inward';
+        $payment = AgreementAdditionalPayment::query()->create(['branch_id' => $context->id(), 'owner_agreement_id' => $type === 'owner' ? $agreement : null, 'tenant_agreement_id' => $type === 'tenant' ? $agreement : null, 'created_by' => $request->user()->getAuthIdentifier(), ...PaymentModeDetails::normalize($data)]);
 
         return ['data' => $payment];
     }

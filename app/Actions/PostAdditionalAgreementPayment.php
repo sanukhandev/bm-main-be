@@ -32,7 +32,8 @@ class PostAdditionalAgreementPayment
                 throw new ApiException('AGREEMENT_NOT_PAYABLE', 'The agreement is not payable.', 422);
             }
 
-            $direction = $lockedLine->direction;
+            // Agreement type is authoritative: owners are paid outward and tenants pay inward.
+            $direction = $type === 'owner' ? 'outward' : 'inward';
             $details = PaymentModeDetails::normalize(['payment_mode' => $lockedLine->payment_mode, 'remarks' => $lockedLine->particulars, 'cheque_no' => $lockedLine->cheque_no, 'cheque_date' => $lockedLine->cheque_date, 'bank_name' => $lockedLine->bank_name, 'bank_reference' => $lockedLine->bank_reference, 'transfer_date' => $lockedLine->transfer_date]);
             $transaction = AccountTransaction::query()->create([
                 'branch_id' => $branch->id,
