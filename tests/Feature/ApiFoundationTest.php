@@ -220,6 +220,32 @@ class ApiFoundationTest extends TestCase
             ->assertJsonPath('data.total_tenant_agreements', 0);
     }
 
+    public function test_owner_agreement_keeps_property_available_until_a_blocking_tenant_agreement_exists(): void
+    {
+        $now = now();
+        $property = DB::table('properties')->insertGetId([
+            'branch_id' => $this->branchA, 'owner_customer_id' => $this->customerA, 'property_code' => 'A-OCC-001',
+            'property_type' => 'apartment', 'name' => 'Available Owner Property', 'status' => 'active', 'created_at' => $now, 'updated_at' => $now,
+        ]);
+        $owner = DB::table('owner_agreements')->insertGetId([
+            'branch_id' => $this->branchA, 'agreement_no' => 'A-OCC-OA-001', 'owner_customer_id' => $this->customerA,
+            'start_date' => $now->toDateString(), 'end_date' => $now->copy()->addDays(10)->toDateString(), 'total_amount' => 1000,
+            'payment_count' => 1, 'payment_mode' => 'cash', 'status' => 'commenced', 'created_at' => $now, 'updated_at' => $now,
+        ]);
+        DB::table('owner_agreement_properties')->insert([
+            'branch_id' => $this->branchA, 'owner_agreement_id' => $owner, 'property_id' => $property, 'owner_customer_id' => $this->customerA,
+            'created_at' => $now, 'updated_at' => $now,
+        ]);
+
+        $this->actingAs($this->branchUser, 'web');
+
+        $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->getJson('/api/v1/dashboard/operational')
+            ->assertOk()
+            ->assertJsonPath('data.occupancy.occupied_properties', 0)
+            ->assertJsonPath('data.occupancy.available_properties', 1);
+    }
+
     public function test_operational_dashboard_returns_branch_scoped_kpis_and_attention_data(): void
     {
         $now = now();

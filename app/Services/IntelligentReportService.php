@@ -3,12 +3,17 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Services\Reports\AgreementOccupancyQuery;
 use App\Support\Branch\BranchContext;
 use Illuminate\Support\Facades\DB;
 
 class IntelligentReportService
 {
     private const ACTIVE_AGREEMENTS = ['approved', 'commenced', 'on_hold'];
+
+    public function __construct(private readonly AgreementOccupancyQuery $occupancy)
+    {
+    }
 
     public function build(User $user, BranchContext $context, array $input): array
     {
@@ -56,8 +61,9 @@ class IntelligentReportService
         $cheques = DB::table('account_transactions')->whereIn('branch_id', $branchIds)->where('status', 'posted')->where('payment_mode', 'cheque')->whereBetween('transaction_date', [$period->from, $period->to]);
         $due = DB::table('tenant_agreement_installments')->whereIn('branch_id', $branchIds)->whereBetween('due_date', [$period->from, $period->to])->sum('amount');
         $collected = DB::table('tenant_agreement_installments')->whereIn('branch_id', $branchIds)->whereBetween('due_date', [$period->from, $period->to])->sum('paid_amount');
-        $properties = DB::table('properties')->whereIn('branch_id', $branchIds)->where('status', 'active')->whereNull('deleted_at')->count();
-        $occupied = DB::table('tenant_agreement_properties as links')->join('tenant_agreements as agreements', 'agreements.id', '=', 'links.tenant_agreement_id')->whereIn('links.branch_id', $branchIds)->whereIn('agreements.status', self::ACTIVE_AGREEMENTS)->where('agreements.start_date', '<=', now()->toDateString())->where('agreements.end_date', '>=', now()->toDateString())->whereNull('agreements.deleted_at')->distinct()->count('links.property_id');
+        $occupancy = $this->occupancy->summarize($branchIds, now()->toDateString());
+        $properties = $occupancy['properties'];
+        $occupied = $occupancy['occupied'];
         $maintenance = $transactions['by_source']['work_order_payment'] ?? 0;
         $petty = $transactions['by_source']['petty_cash'] ?? 0;
 
