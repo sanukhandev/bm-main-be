@@ -3,13 +3,16 @@
 namespace App\Services;
 
 use App\Enums\ChequeStatus;
+use App\Services\Reports\AgreementOccupancyQuery;
 use Illuminate\Support\Facades\DB;
 
 class OperationalDashboardService
 {
     private const ACTIVE_AGREEMENT_STATUSES = ['approved', 'commenced', 'on_hold'];
 
-    private const OCCUPYING_TENANT_STATUSES = ['approved', 'commenced', 'on_hold'];
+    public function __construct(private readonly AgreementOccupancyQuery $occupancy)
+    {
+    }
 
     public function get(int $branchId, bool $includeFinancial = true): array
     {
@@ -24,13 +27,9 @@ class OperationalDashboardService
             ->join('customers', 'customers.id', '=', 'roles.customer_id')
             ->where('roles.branch_id', $branchId)->where('roles.role', 'tenant')
             ->where('customers.status', 'active')->whereNull('customers.deleted_at')->count();
-        $properties = DB::table('properties')->where('branch_id', $branchId)->where('status', 'active')->whereNull('deleted_at')->count();
-        $occupied = DB::table('tenant_agreement_properties as links')
-            ->join('tenant_agreements as agreements', 'agreements.id', '=', 'links.tenant_agreement_id')
-            ->where('links.branch_id', $branchId)->where('agreements.branch_id', $branchId)
-            ->whereIn('agreements.status', self::OCCUPYING_TENANT_STATUSES)
-            ->where('agreements.start_date', '<=', $today)->where('agreements.end_date', '>=', $today)
-            ->whereNull('agreements.deleted_at')->distinct('links.property_id')->count('links.property_id');
+        $occupancy = $this->occupancy->summarize([$branchId], $today);
+        $properties = $occupancy['properties'];
+        $occupied = $occupancy['occupied'];
 
         $ownerExpiring = $this->expiring('owner_agreements', 'owner_customer_id', $branchId, $today, $expiryDate, 'owner');
         $tenantExpiring = $this->expiring('tenant_agreements', 'tenant_customer_id', $branchId, $today, $expiryDate, 'tenant');
