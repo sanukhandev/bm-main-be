@@ -2,9 +2,9 @@
 
 namespace App\Services;
 
+use App\Support\DecimalAmount;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use App\Support\DecimalAmount;
 
 class AgreementScheduleService
 {
