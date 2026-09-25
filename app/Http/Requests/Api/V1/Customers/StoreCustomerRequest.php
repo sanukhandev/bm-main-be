@@ -33,6 +33,7 @@ class StoreCustomerRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:255'],
             'tax_registration_no' => ['nullable', 'string', 'max:100'],
             'identity_no' => ['nullable', 'string', 'max:100'],
+            'identity_verification_token' => ['sometimes', 'nullable', 'string'],
             'company_registration_no' => ['nullable', 'string', 'max:100'],
             'address_line_1' => ['nullable', 'string', 'max:255'],
             'address_line_2' => ['nullable', 'string', 'max:255'],

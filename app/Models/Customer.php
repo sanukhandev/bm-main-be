@@ -37,7 +37,10 @@ class Customer extends Model
 
     protected function casts(): array
     {
-        return ['metadata_json' => 'array'];
+        return [
+            'metadata_json' => 'array',
+            'identity_verified_at' => 'datetime',
+        ];
     }
 
     public function branch(): BelongsTo
