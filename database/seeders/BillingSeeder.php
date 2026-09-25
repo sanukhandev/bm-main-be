@@ -16,7 +16,11 @@ class BillingSeeder extends Seeder
             foreach (Branch::query()->whereIn('code', ['DXB', 'SHJ'])->get() as $branch) {
                 $userId = (int) DB::table('branch_user')->where('branch_id', $branch->id)->orderBy('user_id')->value('user_id');
                 $workOrders = DB::table('work_orders')->where('branch_id', $branch->id)->orderBy('id')->pluck('id');
-                $vendorId = DB::table('vendors')->where('branch_id', $branch->id)->orderBy('id')->value('id');
+                $vendorId = DB::table('customers')->join('customer_role_assignments', function ($join) use ($branch): void {
+                    $join->on('customer_role_assignments.customer_id', '=', 'customers.id')
+                        ->where('customer_role_assignments.branch_id', $branch->id)
+                        ->where('customer_role_assignments.role', 'vendor');
+                })->where('customers.branch_id', $branch->id)->orderBy('customers.id')->value('customers.id');
                 if (! $userId || ! $workOrders->count() || ! $vendorId) {
                     continue;
                 }

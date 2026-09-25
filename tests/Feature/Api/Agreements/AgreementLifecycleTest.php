@@ -44,13 +44,35 @@ class AgreementLifecycleTest extends TestCase
         $this->action('tenant', $tenant['id'], 'submit')->assertJsonPath('data.status', 'pending_approval');
         $this->action('owner', $owner['id'], 'approve')->assertJsonPath('data.status', 'approved');
         $this->action('tenant', $tenant['id'], 'approve')->assertJsonPath('data.status', 'approved');
-        $this->action('owner', $owner['id'], 'commence')->assertJsonPath('data.status', 'commenced');
-        $this->action('tenant', $tenant['id'], 'commence')->assertJsonPath('data.status', 'commenced');
+        $this->action('owner', $owner['id'], 'commence')
+            ->assertJsonPath('data.status', 'commenced')
+            ->assertJsonCount(12, 'data.installments');
+        $this->action('tenant', $tenant['id'], 'commence')
+            ->assertJsonPath('data.status', 'commenced')
+            ->assertJsonCount(12, 'data.installments');
         $this->action('tenant', $tenant['id'], 'hold', ['reason' => 'Operational review'])->assertJsonPath('data.status', 'on_hold');
         $this->action('tenant', $tenant['id'], 'resume')->assertJsonPath('data.status', 'commenced');
 
         $this->assertDatabaseCount('tenant_agreement_status_history', 5);
         $this->assertDatabaseCount('owner_agreement_status_history', 3);
+    }
+
+    public function test_owner_agreement_can_commence_on_its_branch_start_date(): void
+    {
+        $owner = $this->branchRequest()->postJson('/api/v1/owner-agreements', [
+            'owner_customer_id' => $this->customerA,
+            'property_ids' => [$this->propertyId],
+            'start_date' => now('Asia/Dubai')->toDateString(),
+            'end_date' => now('Asia/Dubai')->addYear()->toDateString(),
+            'total_amount' => '12000.00',
+            'currency_code' => 'AED',
+            'payment_count' => 12,
+            'payment_mode' => 'cash',
+        ])->assertCreated()->json('data');
+
+        $this->action('owner', $owner['id'], 'submit')->assertOk();
+        $this->action('owner', $owner['id'], 'approve')->assertOk();
+        $this->action('owner', $owner['id'], 'commence')->assertOk()->assertJsonPath('data.status', 'commenced');
     }
 
     public function test_arbitrary_approval_and_locked_edits_are_rejected(): void

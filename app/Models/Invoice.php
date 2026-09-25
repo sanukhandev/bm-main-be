@@ -30,7 +30,7 @@ class Invoice extends Model
 
     public function vendor(): BelongsTo
     {
-        return $this->belongsTo(Vendor::class);
+        return $this->belongsTo(Customer::class, 'vendor_id');
     }
 
     public function lines(): HasMany

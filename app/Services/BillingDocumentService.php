@@ -3,9 +3,9 @@
 namespace App\Services;
 
 use App\Models\Branch;
+use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\Quotation;
-use App\Models\Vendor;
 use App\Models\WorkOrder;
 use Illuminate\Support\Facades\DB;
 
@@ -80,7 +80,7 @@ class BillingDocumentService
             WorkOrder::query()->forBranch($branchId)->findOrFail($data['work_order_id']);
         }
         if (! empty($data['vendor_id'])) {
-            Vendor::query()->forBranch($branchId)->findOrFail($data['vendor_id']);
+            Customer::query()->forBranch($branchId)->whereKey($data['vendor_id'])->whereHas('businessRoles', fn ($query) => $query->where('role', 'vendor'))->firstOrFail();
         }
     }
 }

@@ -18,7 +18,7 @@ class UpdateWorkOrderRequest extends FormRequest
         $branchId = app(BranchContext::class)->id();
 
         return [
-            'vendor_id' => ['nullable', 'integer', Rule::exists('vendors', 'id')->where(fn ($q) => $q->where('branch_id', $branchId))],
+            'vendor_id' => ['nullable', 'integer', Rule::exists('customers', 'id')->where(fn ($q) => $q->where('branch_id', $branchId)->whereExists(fn ($role) => $role->selectRaw('1')->from('customer_role_assignments')->whereColumn('customer_role_assignments.customer_id', 'customers.id')->where('customer_role_assignments.branch_id', $branchId)->where('customer_role_assignments.role', 'vendor')))],
             'title' => ['required', 'string', 'max:180'],
             'description' => ['nullable', 'string'],
             'priority' => ['required', 'in:low,normal,high,urgent'],

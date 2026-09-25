@@ -109,6 +109,7 @@ Route::prefix('v1')->group(function () {
         Route::apiResource('customers', CustomerController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::get('/properties/available', [PropertyController::class, 'available']);
         Route::apiResource('properties', PropertyController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
+        Route::get('/properties/{property}/profile', [PropertyController::class, 'profile']);
         Route::apiResource('owner-agreements', OwnerAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
         Route::apiResource('tenant-agreements', TenantAgreementController::class)->only(['index', 'store', 'show', 'update', 'destroy']);
     });

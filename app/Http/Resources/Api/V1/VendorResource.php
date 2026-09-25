@@ -8,6 +8,6 @@ class VendorResource extends JsonResource
 {
     public function toArray($request): array
     {
-        return ['id' => $this->id, 'branch_id' => $this->branch_id, 'name' => $this->name, 'phone' => $this->phone, 'email' => $this->email, 'status' => $this->status, 'created_at' => $this->created_at?->toIso8601String()];
+        return ['id' => $this->id, 'branch_id' => $this->branch_id, 'name' => $this->display_name, 'phone' => $this->phone, 'email' => $this->email, 'status' => $this->status, 'created_at' => $this->created_at?->toIso8601String()];
     }
 }

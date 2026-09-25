@@ -34,6 +34,11 @@ class StoreOwnerAgreementRequest extends FormRequest
         ];
     }
 
+    protected function prepareForValidation(): void
+    {
+        $this->merge(['currency_code' => $this->input('currency_code') ?: 'AED']);
+    }
+
     protected function passedValidation(): void
     {
         $this->merge(['currency_code' => strtoupper($this->currency_code)]);

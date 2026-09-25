@@ -32,14 +32,22 @@ class MaintenanceSeeder extends Seeder
     private function vendors(int $branchId, string $branchCode, $now): array
     {
         $values = [
-            ['name' => "{$branchCode} Cooling Services", 'phone' => '+971 50 100 2001'],
-            ['name' => "{$branchCode} General Maintenance", 'phone' => '+971 50 100 2002'],
+            ['code' => "VEN-{$branchCode}-001", 'name' => "{$branchCode} Cooling Services", 'phone' => '+971 50 100 2001'],
+            ['code' => "VEN-{$branchCode}-002", 'name' => "{$branchCode} General Maintenance", 'phone' => '+971 50 100 2002'],
         ];
 
         return array_map(function (array $value) use ($branchId, $now): int {
-            DB::table('vendors')->updateOrInsert(['branch_id' => $branchId, 'name' => $value['name']], $value + ['status' => 'active', 'updated_at' => $now, 'created_at' => $now]);
+            DB::table('customers')->updateOrInsert(
+                ['branch_id' => $branchId, 'customer_code' => $value['code']],
+                ['customer_type' => 'organization', 'display_name' => $value['name'], 'phone' => $value['phone'], 'status' => 'active', 'updated_at' => $now, 'created_at' => $now],
+            );
+            $customerId = (int) DB::table('customers')->where('branch_id', $branchId)->where('customer_code', $value['code'])->value('id');
+            DB::table('customer_role_assignments')->updateOrInsert(
+                ['branch_id' => $branchId, 'customer_id' => $customerId, 'role' => 'vendor'],
+                ['updated_at' => $now, 'created_at' => $now],
+            );
 
-            return (int) DB::table('vendors')->where('branch_id', $branchId)->where('name', $value['name'])->value('id');
+            return $customerId;
         }, $values);
     }
 

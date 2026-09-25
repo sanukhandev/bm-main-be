@@ -75,7 +75,7 @@ class CustomerController extends Controller
         unset($data['identity_verification_token']);
         $roles = $data['roles'] ?? [];
         unset($data['roles']);
-        $data['customer_code'] ??= $numbers->next($branchContext->branch(), in_array('owner', $roles, true) ? 'OWNER_CUSTOMER' : 'TENANT_CUSTOMER', (int) now()->format('Y'));
+        $data['customer_code'] ??= $numbers->next($branchContext->branch(), in_array('owner', $roles, true) ? 'OWNER_CUSTOMER' : (in_array('vendor', $roles, true) ? 'VENDOR_CUSTOMER' : 'TENANT_CUSTOMER'), (int) now()->format('Y'));
         $actor = $request->user();
         $customer = DB::transaction(function () use ($data, $roles, $branchContext, $identityVerificationToken, $verification, $actor): Customer {
             $customer = new Customer($data);
