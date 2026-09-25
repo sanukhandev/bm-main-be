@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\PostBillingPayment;
-use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Billing\StoreBillingPaymentRequest;
 use App\Http\Requests\Api\V1\Billing\StoreInvoiceRequest;
@@ -18,6 +17,7 @@ use App\Models\Quotation;
 use App\Models\QuotationPayment;
 use App\Services\BillingDocumentService;
 use App\Services\PaymentModeDetails;
+use App\Services\PaymentLineState;
 use App\Support\Branch\BranchContext;
 use Illuminate\Http\Request;
 
@@ -70,9 +70,7 @@ class BillingController extends Controller
     {
         Quotation::query()->forBranch($context->id())->findOrFail($quotation);
         $line = QuotationPayment::query()->where('branch_id', $context->id())->where('quotation_id', $quotation)->findOrFail($payment);
-        if ($line->status === 'paid' && $request->validated('status') !== 'paid') {
-            throw new ApiException('FINANCIAL_RECORD_IMMUTABLE', 'Posted payment lines must be voided through their financial transaction.', 409);
-        }
+        PaymentLineState::assertCanChange($line->status, $request->validated('status'));
         if ($request->validated('status') === 'paid') {
             return ['data' => $action->execute($line, $context->branch(), $request->user()->getAuthIdentifier(), $request->header('Idempotency-Key'))];
         } $line->update(['status' => 'defaulted']);
@@ -120,9 +118,7 @@ class BillingController extends Controller
     {
         Invoice::query()->forBranch($context->id())->findOrFail($invoice);
         $line = InvoicePayment::query()->where('branch_id', $context->id())->where('invoice_id', $invoice)->findOrFail($payment);
-        if ($line->status === 'paid' && $request->validated('status') !== 'paid') {
-            throw new ApiException('FINANCIAL_RECORD_IMMUTABLE', 'Posted payment lines must be voided through their financial transaction.', 409);
-        }
+        PaymentLineState::assertCanChange($line->status, $request->validated('status'));
         if ($request->validated('status') === 'paid') {
             return ['data' => $action->execute($line, $context->branch(), $request->user()->getAuthIdentifier(), $request->header('Idempotency-Key'))];
         } $line->update(['status' => 'defaulted']);

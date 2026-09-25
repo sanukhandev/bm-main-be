@@ -21,6 +21,7 @@ use App\Services\AgreementLifecycleService;
 use App\Services\AgreementScheduleService;
 use App\Services\DocumentNumberGenerator;
 use App\Services\PaymentModeDetails;
+use App\Services\PaymentLineState;
 use App\Support\Branch\BranchContext;
 use Illuminate\Support\Facades\Gate;
 
@@ -94,9 +95,7 @@ class AgreementOperationsController extends Controller
         $this->agreement($type, $agreement, $context);
         $line = AgreementAdditionalPayment::query()->where('branch_id', $context->id())->where('id', $payment)->where($type === 'owner' ? 'owner_agreement_id' : 'tenant_agreement_id', $agreement)->firstOrFail();
 
-        if ($line->status === 'paid' && $request->validated('status') !== 'paid') {
-            throw new ApiException('FINANCIAL_RECORD_IMMUTABLE', 'Posted payment lines must be voided through their financial transaction.', 409);
-        }
+        PaymentLineState::assertCanChange($line->status, $request->validated('status'));
 
         if ($request->validated('status') === 'paid') {
             return ['data' => $action->execute($type, $agreement, $line, $context->branch(), $request->user()->getAuthIdentifier(), $request->header('Idempotency-Key'))];
