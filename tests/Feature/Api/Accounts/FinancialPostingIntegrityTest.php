@@ -59,6 +59,27 @@ class FinancialPostingIntegrityTest extends TestCase
             ->assertJsonPath('data.installments.0.receipt.document_no', $posted->json('data.document_no'));
     }
 
+    public function test_tenant_payment_line_forces_inward_receipt_and_keeps_manual_particulars(): void
+    {
+        $line = $this->branchRequest()->postJson('/api/v1/tenant-agreements/'.$this->tenantAgreementId.'/additional-payments', [
+            'direction' => 'outward',
+            'category' => 'Manual charge',
+            'particulars' => 'Tenant manual collection',
+            'amount' => '250.00',
+            'due_date' => '2026-09-23',
+            'payment_mode' => 'cash',
+        ])->assertOk();
+
+        $lineId = $line->json('data.id');
+        $this->assertDatabaseHas('agreement_additional_payments', ['id' => $lineId, 'direction' => 'inward', 'particulars' => 'Tenant manual collection']);
+
+        $this->branchRequest()->withHeader('Idempotency-Key', 'additional-tenant-001')
+            ->patchJson('/api/v1/tenant-agreements/'.$this->tenantAgreementId.'/additional-payments/'.$lineId.'/status', ['status' => 'paid'])
+            ->assertOk();
+
+        $this->assertDatabaseHas('account_transactions', ['source_type' => 'tenant_agreement_additional_payment', 'direction' => 'inward', 'remarks' => 'Tenant manual collection | Manual charge']);
+    }
+
     public function test_mode_details_and_overpayment_are_rejected(): void
     {
         $payload = ['amount' => '1000.00', 'installment_id' => $this->installmentId, 'payment_mode' => 'cheque', 'payment_date' => '2026-09-23'];

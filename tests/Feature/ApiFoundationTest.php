@@ -421,6 +421,8 @@ class ApiFoundationTest extends TestCase
             ->assertJsonPath('data.customer.id', $this->customerA)
             ->assertJsonPath('data.profile.properties.0.property_code', 'A-PROFILE-001')
             ->assertJsonPath('data.profile.agreements.owner.0.agreement_no', 'OA-PROFILE-001')
+            ->assertJsonPath('data.profile.agreements.owner.0.payment_lines.0.line_no', 1)
+            ->assertJsonPath('data.profile.agreements.owner.0.payment_lines.0.direction', 'outward')
             ->assertJsonPath('data.profile.transactions.data.0.document_no', 'OUT-PROFILE-001')
             ->assertJsonPath('data.profile.financial_restricted', false);
     }
