@@ -10,6 +10,7 @@ use App\Models\TenantAgreement;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
+use App\Support\DecimalAmount;
 
 class AgreementLifecycleService
 {
@@ -177,7 +178,7 @@ class AgreementLifecycleService
             throw new ApiException('AGREEMENT_INCOMPLETE', 'The agreement must have an active party and at least one property.', 422);
         }
         $installments = DB::table($type === 'owner' ? 'owner_agreement_installments' : 'tenant_agreement_installments')->where($type === 'owner' ? 'owner_agreement_id' : 'tenant_agreement_id', $agreement->id)->get(['amount']);
-        if ($installments->count() !== (int) $agreement->payment_count || $this->cents($installments->sum(fn ($row) => (string) $row->amount)) !== $this->cents((string) $agreement->total_amount)) {
+        if ($installments->count() !== (int) $agreement->payment_count || DecimalAmount::toCents($installments->sum(fn ($row) => (string) $row->amount)) !== DecimalAmount::toCents((string) $agreement->total_amount)) {
             throw new ApiException('AGREEMENT_SCHEDULE_MISMATCH', 'The installment schedule does not reconcile with the agreement total.', 422);
         }
         if ($type === 'tenant') {
@@ -241,10 +242,4 @@ class AgreementLifecycleService
         };
     }
 
-    private function cents(string $amount): int
-    {
-        [$whole, $fraction] = array_pad(explode('.', $amount, 2), 2, '0');
-
-        return ((int) $whole * 100) + (int) str_pad(substr($fraction, 0, 2), 2, '0');
-    }
 }

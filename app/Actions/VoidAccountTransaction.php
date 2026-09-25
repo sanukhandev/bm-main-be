@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Models\AccountTransaction;
 use App\Models\Branch;
 use App\Services\AuditService;
+use App\Support\DecimalAmount;
 use Illuminate\Support\Facades\DB;
 
 class VoidAccountTransaction
@@ -30,13 +31,13 @@ class VoidAccountTransaction
                 $column = $allocation->tenant_agreement_installment_id ? 'tenant_agreement_installment_id' : 'owner_agreement_installment_id';
                 $installmentId = $allocation->{$column};
                 $installment = DB::table($table)->where('branch_id', $branch->id)->lockForUpdate()->find($installmentId);
-                $paid = $this->cents((string) $installment->paid_amount) - $this->cents((string) $allocation->amount);
+                $paid = DecimalAmount::toCents((string) $installment->paid_amount) - DecimalAmount::toCents((string) $allocation->amount);
                 if ($paid < 0) {
                     throw new ApiException('PAYMENT_ALLOCATION_INVALID', 'The posted allocation cannot be reversed safely.', 409);
                 }
                 DB::table($table)->where('id', $installmentId)->update([
                     'paid_amount' => number_format($paid / 100, 2, '.', ''),
-                    'status' => $paid === 0 ? 'pending' : ($paid >= $this->cents((string) $installment->amount) ? 'paid' : 'partially_paid'),
+                    'status' => $paid === 0 ? 'pending' : ($paid >= DecimalAmount::toCents((string) $installment->amount) ? 'paid' : 'partially_paid'),
                     'updated_at' => now(),
                 ]);
             }
@@ -61,10 +62,4 @@ class VoidAccountTransaction
         });
     }
 
-    private function cents(string $amount): int
-    {
-        [$whole, $fraction] = array_pad(explode('.', $amount, 2), 2, '0');
-
-        return ((int) $whole * 100) + (int) str_pad(substr($fraction, 0, 2), 2, '0');
-    }
 }
