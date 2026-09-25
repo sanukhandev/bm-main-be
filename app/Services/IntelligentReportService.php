@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\User;
 use App\Services\Reports\AgreementOccupancyQuery;
+use App\Services\Reports\AgreementOutstandingQuery;
 use App\Support\Branch\BranchContext;
 use Illuminate\Support\Facades\DB;
 
@@ -11,7 +12,10 @@ class IntelligentReportService
 {
     private const ACTIVE_AGREEMENTS = ['approved', 'commenced', 'on_hold'];
 
-    public function __construct(private readonly AgreementOccupancyQuery $occupancy)
+    public function __construct(
+        private readonly AgreementOccupancyQuery $occupancy,
+        private readonly AgreementOutstandingQuery $outstanding,
+    )
     {
     }
 
@@ -55,9 +59,9 @@ class IntelligentReportService
         $income = $transactions['inward'];
         $cost = $transactions['outward'];
         $profit = $income - $cost;
-        $tenant = DB::table('tenant_agreement_installments')->whereIn('branch_id', $branchIds)->whereColumn('paid_amount', '<', 'amount');
-        $owner = DB::table('owner_agreement_installments')->whereIn('branch_id', $branchIds)->whereColumn('paid_amount', '<', 'amount');
-        $overdue = (clone $tenant)->whereDate('due_date', '<', now()->toDateString());
+        $tenant = $this->outstanding->unpaid($branchIds, 'tenant');
+        $owner = $this->outstanding->unpaid($branchIds, 'owner');
+        $overdue = (clone $tenant)->whereDate('installments.due_date', '<', now()->toDateString());
         $cheques = DB::table('account_transactions')->whereIn('branch_id', $branchIds)->where('status', 'posted')->where('payment_mode', 'cheque')->whereBetween('transaction_date', [$period->from, $period->to]);
         $due = DB::table('tenant_agreement_installments')->whereIn('branch_id', $branchIds)->whereBetween('due_date', [$period->from, $period->to])->sum('amount');
         $collected = DB::table('tenant_agreement_installments')->whereIn('branch_id', $branchIds)->whereBetween('due_date', [$period->from, $period->to])->sum('paid_amount');
@@ -67,7 +71,7 @@ class IntelligentReportService
         $maintenance = $transactions['by_source']['work_order_payment'] ?? 0;
         $petty = $transactions['by_source']['petty_cash'] ?? 0;
 
-        return ['operating_income' => $this->money($income), 'operating_cost' => $this->money($cost), 'operational_profit_loss' => $this->money($profit), 'operating_margin_percent' => $income > 0 ? round($profit / $income * 100, 2) : null, 'total_inward' => $this->money($income), 'total_outward' => $this->money($cost), 'net_cash_movement' => $this->money($profit), 'tenant_receivables' => $this->money($tenant->sum(DB::raw('amount - paid_amount'))), 'owner_payables' => $this->money($owner->sum(DB::raw('amount - paid_amount'))), 'overdue_installments' => ['count' => $overdue->count(), 'amount' => $this->money($overdue->sum(DB::raw('amount - paid_amount')))], 'collection_efficiency_percent' => $due > 0 ? round($collected / $due * 100, 2) : null, 'pending_cheque_value' => $this->money((clone $cheques)->whereIn('cheque_status', ['received', 'deposited'])->sum('amount')), 'bounced_cheque_value' => $this->money((clone $cheques)->where('cheque_status', 'bounced')->sum('amount')), 'maintenance_expenditure' => $this->money($maintenance), 'petty_cash_expenditure' => $this->money($petty), 'occupied_properties' => $occupied, 'available_properties' => max(0, $properties - $occupied), 'occupancy_percent' => $properties > 0 ? round($occupied / $properties * 100, 2) : null, 'expiring_agreements' => $this->expiringCount($branchIds, $period)];
+        return ['operating_income' => $this->money($income), 'operating_cost' => $this->money($cost), 'operational_profit_loss' => $this->money($profit), 'operating_margin_percent' => $income > 0 ? round($profit / $income * 100, 2) : null, 'total_inward' => $this->money($income), 'total_outward' => $this->money($cost), 'net_cash_movement' => $this->money($profit), 'tenant_receivables' => $this->money($tenant->sum(DB::raw('installments.amount - installments.paid_amount'))), 'owner_payables' => $this->money($owner->sum(DB::raw('installments.amount - installments.paid_amount'))), 'overdue_installments' => ['count' => $overdue->count(), 'amount' => $this->money($overdue->sum(DB::raw('installments.amount - installments.paid_amount')))], 'collection_efficiency_percent' => $due > 0 ? round($collected / $due * 100, 2) : null, 'pending_cheque_value' => $this->money((clone $cheques)->whereIn('cheque_status', ['received', 'deposited'])->sum('amount')), 'bounced_cheque_value' => $this->money((clone $cheques)->where('cheque_status', 'bounced')->sum('amount')), 'maintenance_expenditure' => $this->money($maintenance), 'petty_cash_expenditure' => $this->money($petty), 'occupied_properties' => $occupied, 'available_properties' => max(0, $properties - $occupied), 'occupancy_percent' => $properties > 0 ? round($occupied / $properties * 100, 2) : null, 'expiring_agreements' => $this->expiringCount($branchIds, $period)];
     }
 
     private function trends(array $branchIds, IntelligentReportPeriod $period): array

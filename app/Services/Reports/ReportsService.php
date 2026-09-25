@@ -15,6 +15,10 @@ class ReportsService
 {
     private const TERMINAL_AGREEMENT_STATUSES = ['cancelled', 'terminated'];
 
+    public function __construct(private readonly AgreementOutstandingQuery $outstanding)
+    {
+    }
+
     public function ownerAgreements(Request $request, BranchContext $context, bool $financial): array
     {
         $query = OwnerAgreement::query()->with(['owner', 'properties'])->where('branch_id', $context->id());
@@ -181,11 +185,9 @@ class ReportsService
 
     private function installmentReport(Request $request, BranchContext $context, string $type): array
     {
-        $table = $type === 'tenant' ? 'tenant_agreement_installments' : 'owner_agreement_installments';
-        $agreementTable = $type === 'tenant' ? 'tenant_agreements' : 'owner_agreements';
-        $foreign = $type === 'tenant' ? 'tenant_agreement_id' : 'owner_agreement_id';
         $partyColumn = $type === 'tenant' ? 'tenant_customer_id' : 'owner_customer_id';
-        $query = DB::table($table.' as installments')->join($agreementTable.' as agreements', 'agreements.id', '=', 'installments.'.$foreign)->join('customers', 'customers.id', '=', 'agreements.'.$partyColumn)->where('installments.branch_id', $context->id())->whereColumn('installments.paid_amount', '<', 'installments.amount')->select('installments.*', 'agreements.agreement_no', 'agreements.'.$partyColumn, 'customers.display_name as party_name')->when($request->query('date_from'), fn ($q, $v) => $q->whereDate('installments.due_date', '>=', $v))->when($request->query('date_to'), fn ($q, $v) => $q->whereDate('installments.due_date', '<=', $v))->when($request->query('customer_id'), fn ($q, $v) => $q->where('agreements.'.$partyColumn, $v))->when($request->query('agreement_id'), fn ($q, $v) => $q->where('agreements.id', $v))->when($request->query('overdue_only'), fn ($q) => $q->whereDate('installments.due_date', '<', now()->toDateString()))->when($request->query('search'), fn ($q, $v) => $q->where(function ($i) use ($v) {
+        [$table, $agreementTable, $foreign] = $this->outstanding->tables($type);
+        $query = $this->outstanding->unpaid([$context->id()], $type)->when($request->query('date_from'), fn ($q, $v) => $q->whereDate('installments.due_date', '>=', $v))->when($request->query('date_to'), fn ($q, $v) => $q->whereDate('installments.due_date', '<=', $v))->when($request->query('customer_id'), fn ($q, $v) => $q->where('agreements.'.$partyColumn, $v))->when($request->query('agreement_id'), fn ($q, $v) => $q->where('agreements.id', $v))->when($request->query('overdue_only'), fn ($q) => $q->whereDate('installments.due_date', '<', now()->toDateString()))->when($request->query('search'), fn ($q, $v) => $q->where(function ($i) use ($v) {
             $i->where('agreements.agreement_no', 'like', "%{$v}%")->orWhere('customers.display_name', 'like', "%{$v}%");
         }))->orderBy('installments.due_date');
         $summaryQuery = clone $query;
