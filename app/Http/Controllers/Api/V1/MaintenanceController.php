@@ -151,9 +151,7 @@ class MaintenanceController extends Controller
     public function updateWorkOrder(UpdateWorkOrderRequest $request, int $workOrder, BranchContext $context)
     {
         $record = WorkOrder::query()->forBranch($context->id())->findOrFail($workOrder);
-        $data = $request->validated();
-        $data['completed_at'] = $data['status'] === 'completed' ? ($record->completed_at ?: now()) : null;
-        $record->update($data);
+        $record->update($request->validated());
 
         return new WorkOrderResource($record->refresh()->load(['property', 'vendor', 'lines.inventoryItem']));
     }
@@ -163,11 +161,13 @@ class MaintenanceController extends Controller
         return new WorkOrderResource($action->execute($context->branch(), $request->validated(), $request->user()->getAuthIdentifier()));
     }
 
-    public function status(UpdateMaintenanceStatusRequest $request, int $workOrder, BranchContext $context)
+    public function status(UpdateMaintenanceStatusRequest $request, int $workOrder, BranchContext $context, AuditService $audit)
     {
         $record = WorkOrder::query()->forBranch($context->id())->findOrFail($workOrder);
         $status = $request->validated('status');
+        $before = ['status' => $record->status, 'completed_at' => $record->completed_at?->toIso8601String()];
         $record->update(['status' => $status, 'completed_at' => $status === 'completed' ? now() : null]);
+        $audit->record('work_order.status_changed', $record, $before, ['status' => $record->status, 'completed_at' => $record->completed_at?->toIso8601String()], [], $context->id(), $request->user()->getAuthIdentifier());
 
         return new WorkOrderResource($record->refresh()->load(['property', 'vendor', 'lines.inventoryItem']));
     }

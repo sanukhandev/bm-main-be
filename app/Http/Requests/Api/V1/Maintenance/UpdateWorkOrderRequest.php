@@ -23,7 +23,6 @@ class UpdateWorkOrderRequest extends FormRequest
             'description' => ['nullable', 'string'],
             'priority' => ['required', 'in:low,normal,high,urgent'],
             'service_charge' => ['nullable', 'numeric', 'min:0'],
-            'status' => ['required', 'in:open,assigned,in_progress,completed,cancelled'],
         ];
     }
 }
