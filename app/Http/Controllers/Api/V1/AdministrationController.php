@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api\V1;
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Administration\StoreUserRequest;
+use App\Http\Requests\Api\V1\Administration\StoreBranchRequest;
+use App\Http\Requests\Api\V1\Administration\UpdateBranchRequest;
 use App\Http\Requests\Api\V1\Administration\UpdateUserRequest;
 use App\Http\Requests\Api\V1\Administration\UpdateUserStatusRequest;
 use App\Http\Resources\Api\V1\BranchResource;
 use App\Models\Role;
+use App\Models\Branch;
 use App\Models\User;
 use App\Services\AuditService;
 use Illuminate\Http\Request;
@@ -16,6 +19,36 @@ use Illuminate\Support\Facades\DB;
 
 class AdministrationController extends Controller
 {
+    public function branches(Request $request)
+    {
+        $this->ensureSuperAdmin($request);
+
+        return BranchResource::collection(Branch::query()->orderBy('name')->get());
+    }
+
+    public function storeBranch(StoreBranchRequest $request)
+    {
+        $data = $request->validated();
+        $data['state_or_emirate'] = trim($data['state_or_emirate']);
+        $branch = DB::transaction(function () use ($data) {
+            $data['code'] = $this->nextBranchCode($data['state_or_emirate']);
+
+            return Branch::query()->create($data);
+        });
+        app(AuditService::class)->record('branch.created', $branch, null, $branch->only(['code', 'name', 'state_or_emirate', 'status']), [], null, $request->user()->id);
+
+        return (new BranchResource($branch))->response()->setStatusCode(201);
+    }
+
+    public function updateBranch(UpdateBranchRequest $request, Branch $branch)
+    {
+        $before = $branch->only(['code', 'name', 'state_or_emirate', 'status']);
+        $branch->fill($request->validated())->save();
+        app(AuditService::class)->record('branch.updated', $branch, $before, $branch->only(['code', 'name', 'state_or_emirate', 'status']), [], null, $request->user()->id);
+
+        return new BranchResource($branch->fresh());
+    }
+
     public function users(Request $request)
     {
         $this->ensureSuperAdmin($request);
@@ -114,6 +147,18 @@ class AdministrationController extends Controller
         if (! $request->user()->isSuperAdmin()) {
             throw new ApiException('FORBIDDEN', 'Only super admins can access administration data.', 403);
         }
+    }
+
+    private function nextBranchCode(string $emirate): string
+    {
+        Branch::query()->lockForUpdate()->get('id');
+        $prefix = ['Abu Dhabi' => 'AUH', 'Ajman' => 'AJM', 'Dubai' => 'DXB', 'Fujairah' => 'FUJ', 'Ras Al Khaimah' => 'RAK', 'Sharjah' => 'SHJ', 'Umm Al Quwain' => 'UAQ'][$emirate] ?? strtoupper(substr(preg_replace('/[^A-Za-z0-9]/', '', $emirate), 0, 3));
+        $prefix = $prefix ?: 'UAE';
+        $last = Branch::query()->lockForUpdate()->where('state_or_emirate', $emirate)->get('code')->reduce(function (int $max, Branch $branch) use ($prefix): int {
+            return preg_match('/^'.preg_quote($prefix, '/').'-(\d+)$/i', $branch->code, $match) ? max($max, (int) $match[1]) : $max;
+        }, 0);
+
+        return sprintf('%s-%03d', $prefix, $last + 1);
     }
 
     private function validatedRoles(array $keys)

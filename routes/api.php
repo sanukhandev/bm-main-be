@@ -31,6 +31,9 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::prefix('admin')->middleware(['auth:sanctum', 'user.active', 'throttle:api'])->group(function () {
+        Route::get('/branches', [AdministrationController::class, 'branches']);
+        Route::post('/branches', [AdministrationController::class, 'storeBranch']);
+        Route::patch('/branches/{branch}', [AdministrationController::class, 'updateBranch']);
         Route::get('/users', [AdministrationController::class, 'users']);
         Route::post('/users', [AdministrationController::class, 'store']);
         Route::patch('/users/{user}', [AdministrationController::class, 'update']);
