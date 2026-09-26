@@ -6,7 +6,10 @@ use Illuminate\Foundation\Http\FormRequest;
 
 class StoreBranchRequest extends FormRequest
 {
-    public function authorize(): bool { return $this->user()?->isSuperAdmin() === true; }
+    public function authorize(): bool
+    {
+        return $this->user()?->isSuperAdmin() === true;
+    }
 
     public function rules(): array
     {

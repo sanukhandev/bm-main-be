@@ -4,14 +4,14 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Api\V1\Administration\StoreUserRequest;
 use App\Http\Requests\Api\V1\Administration\StoreBranchRequest;
+use App\Http\Requests\Api\V1\Administration\StoreUserRequest;
 use App\Http\Requests\Api\V1\Administration\UpdateBranchRequest;
 use App\Http\Requests\Api\V1\Administration\UpdateUserRequest;
 use App\Http\Requests\Api\V1\Administration\UpdateUserStatusRequest;
 use App\Http\Resources\Api\V1\BranchResource;
-use App\Models\Role;
 use App\Models\Branch;
+use App\Models\Role;
 use App\Models\User;
 use App\Services\AuditService;
 use Illuminate\Http\Request;
