@@ -306,6 +306,24 @@ class ApiFoundationTest extends TestCase
             ->assertJsonFragment(['name' => 'super_admin']);
     }
 
+    public function test_super_admin_can_create_and_edit_branches_with_emirate_codes(): void
+    {
+        $this->actingAs($this->superAdmin(), 'web');
+
+        $first = $this->postJson('/api/v1/admin/branches', [
+            'name' => 'Dubai One', 'state_or_emirate' => 'Dubai', 'timezone' => 'Asia/Dubai', 'currency_code' => 'AED',
+        ])->assertCreated()->assertJsonPath('data.code', 'DXB-001');
+        $second = $this->postJson('/api/v1/admin/branches', [
+            'name' => 'Dubai Two', 'state_or_emirate' => 'Dubai', 'timezone' => 'Asia/Dubai', 'currency_code' => 'AED',
+        ])->assertCreated()->assertJsonPath('data.code', 'DXB-002');
+        $this->postJson('/api/v1/admin/branches', [
+            'code' => 'FAKE', 'name' => 'Ajman One', 'state_or_emirate' => 'Ajman', 'timezone' => 'Asia/Dubai', 'currency_code' => 'AED',
+        ])->assertCreated()->assertJsonPath('data.code', 'AJM-001');
+        $this->patchJson('/api/v1/admin/branches/'.$first->json('data.id'), ['name' => 'Dubai Updated'])
+            ->assertOk()->assertJsonPath('data.name', 'Dubai Updated')->assertJsonPath('data.code', 'DXB-001');
+        $this->assertNotSame($first->json('data.code'), $second->json('data.code'));
+    }
+
     public function test_super_admin_can_create_update_and_suspend_users_with_branch_access(): void
     {
         $superAdmin = $this->superAdmin();
