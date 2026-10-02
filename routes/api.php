@@ -40,6 +40,11 @@ Route::prefix('v1')->group(function () {
         Route::patch('/users/{user}', [AdministrationController::class, 'update']);
         Route::patch('/users/{user}/status', [AdministrationController::class, 'updateStatus']);
         Route::get('/roles', [AdministrationController::class, 'roles']);
+        Route::post('/roles', [AdministrationController::class, 'storeRole']);
+        Route::patch('/roles/{role}', [AdministrationController::class, 'updateRole']);
+        Route::get('/permissions', [AdministrationController::class, 'permissions']);
+        Route::post('/permissions', [AdministrationController::class, 'storePermission']);
+        Route::patch('/permissions/{permission}', [AdministrationController::class, 'updatePermission']);
     });
 
     Route::middleware(['api.json', 'auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
