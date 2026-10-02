@@ -19,6 +19,11 @@ class ZaakiyService
         $contents = [];
         $skillData = $context;
         unset($skillData['navigation']);
+        $skillData['evidence'] = array_map(static function (array $result): array {
+            unset($result['navigation'], $result['suggested_followups']);
+
+            return $result;
+        }, $skillData['evidence'] ?? []);
         $contents[] = ['role' => 'user', 'parts' => [['text' => $message."\n\nVerified result from the selected ERP skill:\n".json_encode($skillData, JSON_THROW_ON_ERROR)]]];
 
         $prompt = <<<'PROMPT'
