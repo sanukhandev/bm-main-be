@@ -18,19 +18,29 @@ class OwnerAgreementResource extends JsonResource
             'owner' => new CustomerResource($this->whenLoaded('owner')),
             'properties' => PropertyResource::collection($this->whenLoaded('properties')),
             'installments' => $this->whenLoaded('installments', function () {
-                $rows = $this->installments->map(fn ($installment) => [
+                $rows = $this->installments->map(function ($installment) {
+                    $category = $installment->category ?: 'rent';
+                    $particulars = $installment->particulars ?: $installment->notes ?: 'Installment '.$installment->installment_no.' payment';
+
+                    return [
                     'id' => $installment->id, 'installment_no' => $installment->installment_no, 'due_date' => $installment->due_date?->format('Y-m-d'),
                     'amount' => $installment->amount, 'paid_amount' => $installment->paid_amount, 'balance' => number_format((float) $installment->amount - (float) $installment->paid_amount, 2, '.', ''),
-                    'payment_mode' => $installment->payment_mode, 'category' => $installment->category, 'particulars' => $installment->particulars, 'transaction_reference' => $this->reference($installment->category, $installment->particulars, 'outward'), 'direction' => 'outward', 'status' => $installment->status, 'notes' => $installment->notes, 'is_extra' => false,
+                    'payment_mode' => $installment->payment_mode, 'category' => $category, 'particulars' => $particulars, 'transaction_reference' => $this->reference($category, $particulars, 'outward'), 'direction' => 'outward', 'status' => $installment->status, 'notes' => $installment->notes, 'is_extra' => false,
                     'receipt' => $this->receiptFor($installment->allocations, $installment->status),
-                ]);
+                    ];
+                });
 
                 return $this->resource->relationLoaded('additionalPayments')
-                    ? $rows->concat($this->additionalPayments->map(fn ($line) => [
+                    ? $rows->concat($this->additionalPayments->map(function ($line) {
+                        $category = $line->category ?: 'others';
+                        $particulars = $line->particulars ?: 'Additional payment';
+
+                        return [
                         'id' => 'extra-'.$line->id, 'installment_no' => 'extra-'.$line->id, 'due_date' => $line->due_date?->format('Y-m-d'), 'amount' => $line->amount, 'paid_amount' => '0.00', 'balance' => $line->amount,
-                        'payment_mode' => $line->payment_mode, 'direction' => $line->direction, 'status' => $line->status, 'notes' => $line->particulars.' | '.$line->category, 'is_extra' => true,
+                        'payment_mode' => $line->payment_mode, 'category' => $category, 'particulars' => $particulars, 'transaction_reference' => $this->reference($category, $particulars, $line->direction ?: 'outward'), 'direction' => $line->direction ?: 'outward', 'status' => $line->status, 'notes' => $particulars.' | '.$category, 'is_extra' => true,
                         'receipt' => $this->receiptForAdditional($line),
-                    ]))->values()
+                        ];
+                    }))->values()
                     : $rows;
             }),
             'disputes' => $this->whenLoaded('disputes'),
@@ -63,9 +73,9 @@ class OwnerAgreementResource extends JsonResource
         ];
     }
 
-    private function reference(string $category, string $particulars, string $direction): string
+    private function reference(?string $category, ?string $particulars, ?string $direction): string
     {
-        return implode('/', [$this->owner?->customer_code ?? 'CUSTOMER', $this->agreement_no, strtoupper($direction), strtoupper($category), $particulars]);
+        return implode('/', [$this->owner?->customer_code ?? 'CUSTOMER', $this->agreement_no, strtoupper($direction ?: 'outward'), strtoupper($category ?: 'rent'), $particulars ?: '[particulars unavailable]']);
     }
 
     private function receiptFor($allocations, string $status): ?array

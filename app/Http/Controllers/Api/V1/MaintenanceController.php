@@ -122,7 +122,7 @@ class MaintenanceController extends Controller
 
     public function showWorkOrder(int $workOrder, BranchContext $context)
     {
-        return new WorkOrderResource(WorkOrder::query()->forBranch($context->id())->with(['property', 'vendor', 'lines.inventoryItem', 'payments.accountTransaction'])->findOrFail($workOrder));
+        return new WorkOrderResource(WorkOrder::query()->forBranch($context->id())->with(['property', 'vendor', 'lines.inventoryItem', 'payments.workOrder.vendor', 'payments.accountTransaction'])->findOrFail($workOrder));
     }
 
     public function storeWorkOrderPayment(StoreWorkOrderPaymentRequest $request, int $workOrder, BranchContext $context)
@@ -130,7 +130,7 @@ class MaintenanceController extends Controller
         WorkOrder::query()->forBranch($context->id())->findOrFail($workOrder);
         $payment = WorkOrderPayment::query()->create(['branch_id' => $context->id(), 'work_order_id' => $workOrder, 'created_by' => $request->user()->getAuthIdentifier(), ...PaymentModeDetails::normalize($request->validated())]);
 
-        return new WorkOrderPaymentResource($payment);
+        return new WorkOrderPaymentResource($payment->load('workOrder.vendor'));
     }
 
     public function updateWorkOrderPaymentStatus(UpdateWorkOrderPaymentStatusRequest $request, int $workOrder, int $payment, BranchContext $context, PostWorkOrderPayment $action)

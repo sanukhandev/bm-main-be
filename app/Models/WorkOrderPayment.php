@@ -17,4 +17,9 @@ class WorkOrderPayment extends Model
     {
         return $this->hasOne(AccountTransaction::class, 'source_id')->where('source_type', 'work_order_payment');
     }
+
+    public function workOrder()
+    {
+        return $this->belongsTo(WorkOrder::class);
+    }
 }
