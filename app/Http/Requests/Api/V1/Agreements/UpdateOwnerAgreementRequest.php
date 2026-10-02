@@ -30,6 +30,10 @@ class UpdateOwnerAgreementRequest extends FormRequest
             'payment_count' => ['sometimes', 'required', 'integer', 'min:1'],
             'payment_frequency' => ['sometimes', 'nullable', 'string', 'max:30'],
             'payment_mode' => ['sometimes', 'required', 'in:cash,cheque,bank_transfer'],
+            'installments' => ['sometimes', 'array'],
+            'installments.*.installment_no' => ['required', 'integer', 'distinct', 'min:1'],
+            'installments.*.category' => ['required', 'in:rent,security,commission'],
+            'installments.*.particulars' => ['required', 'string', 'max:255'],
             'terms_text' => ['sometimes', 'nullable', 'string'],
             'notes' => ['sometimes', 'nullable', 'string'],
         ];
@@ -40,5 +44,20 @@ class UpdateOwnerAgreementRequest extends FormRequest
         if ($this->has('currency_code')) {
             $this->merge(['currency_code' => strtoupper($this->currency_code)]);
         }
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            if (! $this->has('installments')) {
+                return;
+            }
+            $agreement = $this->route('owner_agreement');
+            $count = (int) $this->input('payment_count', $agreement?->payment_count);
+            $numbers = collect($this->input('installments', []))->pluck('installment_no')->sort()->values()->all();
+            if (count($numbers) !== $count || $numbers !== range(1, $count)) {
+                $validator->errors()->add('installments', 'Installment schedule must match the number of installments.');
+            }
+        });
     }
 }

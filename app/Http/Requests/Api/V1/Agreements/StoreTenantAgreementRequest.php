@@ -30,6 +30,10 @@ class StoreTenantAgreementRequest extends FormRequest
             'payment_count' => ['required', 'integer', 'min:1'],
             'payment_frequency' => ['nullable', 'string', 'max:30'],
             'payment_mode' => ['required', 'in:cash,cheque,bank_transfer'],
+            'installments' => ['required', 'array'],
+            'installments.*.installment_no' => ['required', 'integer', 'distinct', 'min:1'],
+            'installments.*.category' => ['required', 'in:rent,security,commission'],
+            'installments.*.particulars' => ['required', 'string', 'max:255'],
             'terms_text' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
         ];
@@ -43,5 +47,18 @@ class StoreTenantAgreementRequest extends FormRequest
     protected function passedValidation(): void
     {
         $this->merge(['currency_code' => strtoupper($this->currency_code)]);
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            if (count($this->input('installments', [])) !== (int) $this->input('payment_count')) {
+                $validator->errors()->add('installments', 'Installment schedule must match the number of installments.');
+            }
+            $numbers = collect($this->input('installments', []))->pluck('installment_no')->sort()->values()->all();
+            if ($numbers !== range(1, (int) $this->input('payment_count'))) {
+                $validator->errors()->add('installments', 'Installment numbers must run from 1 to the payment count.');
+            }
+        });
     }
 }

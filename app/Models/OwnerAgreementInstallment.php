@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class OwnerAgreementInstallment extends Model
 {
-    protected $fillable = ['installment_no', 'due_date', 'amount', 'payment_mode', 'notes'];
+    protected $fillable = ['installment_no', 'due_date', 'amount', 'payment_mode', 'category', 'particulars', 'notes'];
 
     protected function casts(): array
     {

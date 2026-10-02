@@ -104,4 +104,13 @@ trait ApiScenario
     {
         return $this->withHeader('X-Branch-Id', $branchId ?? (string) $this->branchA);
     }
+
+    protected function agreementInstallments(int $count): array
+    {
+        return array_map(fn (int $number) => [
+            'installment_no' => $number,
+            'category' => 'rent',
+            'particulars' => 'Test rent installment '.$number,
+        ], range(1, $count));
+    }
 }
