@@ -16,9 +16,15 @@ class AuditLogController extends Controller
             'date_from' => 'nullable|date', 'date_to' => 'nullable|date|after_or_equal:date_from',
             'actor_user_id' => 'nullable|integer', 'action' => 'nullable|string|max:100',
             'entity_type' => 'nullable|string|max:100', 'entity_id' => 'nullable|integer',
-            'search' => 'nullable|string|max:100', 'per_page' => 'nullable|integer|min:1|max:100',
+            'search' => 'nullable|string|max:100', 'all_branches' => 'nullable|boolean',
+            'per_page' => 'nullable|integer|min:1|max:100',
         ]);
-        $query = AuditLog::query()->with(['actor', 'branch'])->where('branch_id', $context->id())
+        $allBranches = filter_var($request->query('all_branches', false), FILTER_VALIDATE_BOOLEAN);
+        abort_if($allBranches && ! $request->user()->isSuperAdmin(), 403);
+
+        $query = AuditLog::query()->with(['actor', 'branch'])
+            ->when(! $allBranches, fn ($q) => $q->where('branch_id', $context->id()))
+            ->when(! $request->user()->isSuperAdmin(), fn ($q) => $q->where('action', 'not like', 'activity.%'))
             ->when($request->query('date_from'), fn ($q, $v) => $q->whereDate('created_at', '>=', $v))
             ->when($request->query('date_to'), fn ($q, $v) => $q->whereDate('created_at', '<=', $v))
             ->when($request->query('actor_user_id'), fn ($q, $v) => $q->where('actor_user_id', $v))

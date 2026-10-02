@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\V1\OwnerAgreementController;
 use App\Http\Controllers\Api\V1\PropertyController;
 use App\Http\Controllers\Api\V1\ReportsController;
 use App\Http\Controllers\Api\V1\TenantAgreementController;
+use App\Http\Controllers\Api\V1\UserActivityController;
 use App\Http\Controllers\Api\V1\ZaakiyController;
 use Illuminate\Support\Facades\Route;
 
@@ -48,6 +49,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/dashboard/operational', [DashboardController::class, 'operational']);
         Route::post('/ai/zaakiy/chat', [ZaakiyController::class, 'chat'])->middleware('throttle:api');
         Route::get('/audit-logs', [AuditLogController::class, 'index'])->middleware('permission:audit.view');
+        Route::post('/activity-logs', [UserActivityController::class, 'store']);
         Route::get('/reports/owner-agreements', [ReportsController::class, 'ownerAgreements']);
         Route::get('/reports/tenant-agreements', [ReportsController::class, 'tenantAgreements']);
         Route::get('/reports/agreement-expiry', [ReportsController::class, 'expiry']);

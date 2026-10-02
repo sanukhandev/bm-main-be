@@ -3,10 +3,12 @@
 namespace Tests\Feature\Api\Audit;
 
 use App\Exceptions\ApiException;
+use App\Jobs\RecordUserActivity;
 use App\Models\AuditLog;
 use App\Services\AuditService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
 use Tests\Support\ApiScenario;
 use Tests\TestCase;
 
@@ -23,7 +25,7 @@ class AuditTrailTest extends TestCase
 
     public function test_audit_records_actor_branch_and_sanitizes_sensitive_metadata(): void
     {
-        $log = app(AuditService::class)->record('customer.updated', null, ['password' => 'old'], ['name' => 'New'], ['token' => 'secret', 'reason' => 'Correction'], $this->branchA, $this->apiUser->id);
+        $log = app(AuditService::class)->record('customer.updated', null, ['password' => 'old'], ['name' => 'New'], ['token' => 'secret', 'reason' => 'Correction', 'page' => '/app/customers/1'], $this->branchA, $this->apiUser->id);
 
         $this->assertSame($this->apiUser->id, $log->actor_user_id);
         $this->assertSame($this->branchA, $log->branch_id);
@@ -58,5 +60,58 @@ class AuditTrailTest extends TestCase
             ->delete();
 
         $this->branchRequest()->getJson('/api/v1/audit-logs')->assertForbidden();
+    }
+
+    public function test_user_activity_is_queued_without_blocking_the_request(): void
+    {
+        Queue::fake();
+
+        $this->branchRequest()->postJson('/api/v1/activity-logs', [
+            'action' => 'opened',
+            'page' => '/app/customers/1',
+            'metadata' => ['source' => 'frontend'],
+        ])->assertStatus(202);
+
+        Queue::assertPushedOn('activity', RecordUserActivity::class, fn ($job) => $job->action === 'activity.opened'
+            && $job->branchId === $this->branchA
+            && $job->actorId === $this->apiUser->id
+            && $job->metadata['page'] === '/app/customers/1');
+        $this->assertDatabaseMissing('audit_logs', ['action' => 'activity.opened']);
+    }
+
+    public function test_only_super_admin_can_request_all_branch_activity(): void
+    {
+        $this->app['db']->table('audit_logs')->insert([
+            'branch_id' => $this->branchA,
+            'actor_user_id' => $this->apiUser->id,
+            'user_id' => $this->apiUser->id,
+            'action' => 'activity.opened',
+            'metadata_json' => json_encode(['page' => '/app/dashboard']),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->branchRequest()->getJson('/api/v1/audit-logs')->assertOk()->assertJsonMissing(['action' => 'activity.opened']);
+
+        $this->app['db']->table('audit_logs')->insert([
+            'branch_id' => $this->branchB,
+            'actor_user_id' => $this->apiUser->id,
+            'user_id' => $this->apiUser->id,
+            'action' => 'activity.viewed',
+            'metadata_json' => json_encode(['page' => '/app/dashboard']),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $this->branchRequest()->getJson('/api/v1/audit-logs?all_branches=1')->assertForbidden();
+
+        DB::table('user_global_roles')->insert([
+            'user_id' => $this->apiUser->id,
+            'role_id' => DB::table('roles')->where('key', 'super_admin')->value('id'),
+        ]);
+
+        $this->branchRequest()->getJson('/api/v1/audit-logs?all_branches=1')
+            ->assertOk()
+            ->assertJsonPath('data.0.action', 'activity.viewed')
+            ->assertJsonPath('data.0.branch.id', $this->branchB);
     }
 }
