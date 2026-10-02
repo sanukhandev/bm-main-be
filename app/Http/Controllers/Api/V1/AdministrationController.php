@@ -168,7 +168,7 @@ class AdministrationController extends Controller
                 'name' => $data['name'],
                 'description' => $data['description'] ?? null,
             ]);
-            if (array_key_exists('permission_keys', $data) && $role->key !== 'super_admin') {
+            if (array_key_exists('permission_keys', $data)) {
                 $this->syncRolePermissions($role, $data['permission_keys']);
             }
 
