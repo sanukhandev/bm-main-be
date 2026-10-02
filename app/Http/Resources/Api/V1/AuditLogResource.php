@@ -11,8 +11,12 @@ class AuditLogResource extends JsonResource
         return [
             'id' => $this->id,
             'action' => $this->action,
+            'activity' => str_starts_with((string) $this->action, 'activity.')
+                ? str_replace('_', ' ', ucwords(str_replace('.', ' ', substr($this->action, 9))))
+                : $this->action,
             'entity_type' => $this->entity_type,
             'entity_id' => $this->entity_id,
+            'page' => data_get($this->metadata_json, 'page'),
             'actor' => $this->actor ? ['id' => $this->actor->id, 'name' => $this->actor->name, 'email' => $this->actor->email] : null,
             'branch' => $this->branch ? ['id' => $this->branch->id, 'name' => $this->branch->name] : null,
             'before' => $this->before_json,
