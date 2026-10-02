@@ -63,7 +63,7 @@ class FinancialPostingIntegrityTest extends TestCase
     {
         $line = $this->branchRequest()->postJson('/api/v1/tenant-agreements/'.$this->tenantAgreementId.'/additional-payments', [
             'direction' => 'outward',
-            'category' => 'Manual charge',
+            'category' => 'others',
             'particulars' => 'Tenant manual collection',
             'amount' => '250.00',
             'due_date' => '2026-09-23',
@@ -77,7 +77,7 @@ class FinancialPostingIntegrityTest extends TestCase
             ->patchJson('/api/v1/tenant-agreements/'.$this->tenantAgreementId.'/additional-payments/'.$lineId.'/status', ['status' => 'paid'])
             ->assertOk();
 
-        $this->assertDatabaseHas('account_transactions', ['source_type' => 'tenant_agreement_additional_payment', 'direction' => 'inward', 'remarks' => 'Tenant manual collection | Manual charge']);
+        $this->assertDatabaseHas('account_transactions', ['source_type' => 'tenant_agreement_additional_payment', 'direction' => 'inward', 'remarks' => 'Tenant manual collection | others']);
     }
 
     public function test_mode_details_and_overpayment_are_rejected(): void

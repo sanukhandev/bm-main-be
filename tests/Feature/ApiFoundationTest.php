@@ -525,6 +525,11 @@ class ApiFoundationTest extends TestCase
                 'currency_code' => 'AED',
                 'payment_count' => 12,
                 'payment_mode' => 'bank_transfer',
+                'installments' => array_map(fn (int $number) => [
+                    'installment_no' => $number,
+                    'category' => 'rent',
+                    'particulars' => 'Rent installment '.$number,
+                ], range(1, 12)),
             ])
             ->assertCreated()
             ->json('data');
@@ -543,6 +548,11 @@ class ApiFoundationTest extends TestCase
                 'currency_code' => 'AED',
                 'payment_count' => 12,
                 'payment_mode' => 'cash',
+                'installments' => array_map(fn (int $number) => [
+                    'installment_no' => $number,
+                    'category' => 'rent',
+                    'particulars' => 'Rent installment '.$number,
+                ], range(1, 12)),
             ])
             ->assertCreated();
 

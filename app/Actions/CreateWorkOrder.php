@@ -4,6 +4,7 @@ namespace App\Actions;
 
 use App\Exceptions\ApiException;
 use App\Models\Branch;
+use App\Models\InventoryItem;
 use App\Models\StockMovement;
 use App\Models\WorkOrder;
 use App\Services\AuditService;
@@ -25,7 +26,7 @@ class CreateWorkOrder
                 if ($line['line_type'] === 'inventory') {
                     if (empty($line['inventory_item_id'])) {
                         throw new ApiException('INVENTORY_ITEM_REQUIRED', 'Inventory item is required for inventory lines.', 422);
-                    } $available = (float) DB::table('stock_movements')->where('branch_id', $branch->id)->where('inventory_item_id', $line['inventory_item_id'])->sum(DB::raw('CASE WHEN quantity >= 0 THEN quantity ELSE quantity END'));
+                    }
                     InventoryItem::query()->forBranch($branch->id)->lockForUpdate()->findOrFail($line['inventory_item_id']);
                     $out = (float) DB::table('stock_movements')->where('branch_id', $branch->id)->where('inventory_item_id', $line['inventory_item_id'])->where('quantity', '<', 0)->sum(DB::raw('ABS(quantity)'));
                     $in = (float) DB::table('stock_movements')->where('branch_id', $branch->id)->where('inventory_item_id', $line['inventory_item_id'])->where('quantity', '>', 0)->sum('quantity');

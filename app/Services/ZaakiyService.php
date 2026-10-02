@@ -48,10 +48,11 @@ PROMPT;
         $response = null;
         for ($attempt = 1; $attempt <= 3; $attempt++) {
             $response = Http::withOptions(['stream' => true])
+                ->withHeaders(['x-goog-api-key' => $key])
                 ->timeout(90)
                 ->connectTimeout(15)
                 ->acceptJson()
-                ->post($url.'?alt=sse&key='.urlencode($key), $payload);
+                ->post($url.'?alt=sse', $payload);
 
             if (! in_array($response->status(), [429, 500, 502, 503, 504], true) || $attempt === 3) {
                 break;
