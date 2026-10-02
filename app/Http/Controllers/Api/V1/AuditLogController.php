@@ -16,7 +16,7 @@ class AuditLogController extends Controller
             'date_from' => 'nullable|date', 'date_to' => 'nullable|date|after_or_equal:date_from',
             'actor_user_id' => 'nullable|integer', 'action' => 'nullable|string|max:100',
             'entity_type' => 'nullable|string|max:100', 'entity_id' => 'nullable|integer',
-            'search' => 'nullable|string|max:100', 'all_branches' => 'nullable|boolean',
+            'search' => 'nullable|string|max:100', 'all_branches' => 'nullable|in:true,false,1,0',
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
         $allBranches = filter_var($request->query('all_branches', false), FILTER_VALIDATE_BOOLEAN);

@@ -109,7 +109,7 @@ class AuditTrailTest extends TestCase
             'role_id' => DB::table('roles')->where('key', 'super_admin')->value('id'),
         ]);
 
-        $this->branchRequest()->getJson('/api/v1/audit-logs?all_branches=1')
+        $this->branchRequest()->getJson('/api/v1/audit-logs?all_branches=true')
             ->assertOk()
             ->assertJsonPath('data.0.action', 'activity.viewed')
             ->assertJsonPath('data.0.branch.id', $this->branchB);
