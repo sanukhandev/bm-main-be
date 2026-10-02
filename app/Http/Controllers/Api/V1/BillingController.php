@@ -30,7 +30,7 @@ class BillingController extends Controller
 
     public function quotation(int $quotation, BranchContext $context)
     {
-        return new QuotationResource(Quotation::query()->forBranch($context->id())->with(['workOrder', 'vendor', 'lines', 'payments.accountTransaction'])->findOrFail($quotation));
+        return new QuotationResource(Quotation::query()->forBranch($context->id())->with(['workOrder', 'vendor', 'lines', 'payments.quotation.vendor', 'payments.accountTransaction'])->findOrFail($quotation));
     }
 
     public function storeQuotation(StoreQuotationRequest $request, BranchContext $context, BillingDocumentService $service)
@@ -63,7 +63,7 @@ class BillingController extends Controller
     {
         Quotation::query()->forBranch($context->id())->findOrFail($quotation);
 
-        return new BillingPaymentResource(QuotationPayment::query()->create(['branch_id' => $context->id(), 'quotation_id' => $quotation, 'created_by' => $request->user()->getAuthIdentifier(), ...PaymentModeDetails::normalize($request->validated())]));
+        return new BillingPaymentResource(QuotationPayment::query()->create(['branch_id' => $context->id(), 'quotation_id' => $quotation, 'created_by' => $request->user()->getAuthIdentifier(), ...PaymentModeDetails::normalize($request->validated())])->load('quotation.vendor'));
     }
 
     public function quotationPaymentStatus(UpdateBillingPaymentStatusRequest $request, int $quotation, int $payment, BranchContext $context, PostBillingPayment $action)
@@ -87,7 +87,7 @@ class BillingController extends Controller
 
     public function invoice(int $invoice, BranchContext $context)
     {
-        return new InvoiceResource(Invoice::query()->forBranch($context->id())->with(['quotation', 'workOrder', 'vendor', 'lines', 'payments.accountTransaction'])->findOrFail($invoice));
+        return new InvoiceResource(Invoice::query()->forBranch($context->id())->with(['quotation', 'workOrder', 'vendor', 'lines', 'payments.invoice.vendor', 'payments.accountTransaction'])->findOrFail($invoice));
     }
 
     public function storeInvoice(StoreInvoiceRequest $request, BranchContext $context, BillingDocumentService $service)
@@ -113,7 +113,7 @@ class BillingController extends Controller
     {
         Invoice::query()->forBranch($context->id())->findOrFail($invoice);
 
-        return new BillingPaymentResource(InvoicePayment::query()->create(['branch_id' => $context->id(), 'invoice_id' => $invoice, 'created_by' => $request->user()->getAuthIdentifier(), ...PaymentModeDetails::normalize($request->validated())]));
+        return new BillingPaymentResource(InvoicePayment::query()->create(['branch_id' => $context->id(), 'invoice_id' => $invoice, 'created_by' => $request->user()->getAuthIdentifier(), ...PaymentModeDetails::normalize($request->validated())])->load('invoice.vendor'));
     }
 
     public function invoicePaymentStatus(UpdateBillingPaymentStatusRequest $request, int $invoice, int $payment, BranchContext $context, PostBillingPayment $action)
