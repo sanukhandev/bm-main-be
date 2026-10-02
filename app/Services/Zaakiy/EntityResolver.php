@@ -2,11 +2,12 @@
 
 namespace App\Services\Zaakiy;
 
+use App\Services\Zaakiy\DTOs\ZaakiySkillResult;
 use Illuminate\Support\Facades\DB;
 
 class EntityResolver
 {
-    public function resolve(string $message, ZaakiyExecutionContext $context): ?SkillEvidence
+    public function resolve(string $message, ZaakiyExecutionContext $context): ?ZaakiySkillResult
     {
         preg_match_all('/\b(?:TA|OA|P|WO|IR|OV|CUS)[-_][A-Z0-9-]+\b/i', $message, $matches);
         if ($matches[0] === []) {
@@ -39,6 +40,12 @@ class EntityResolver
                 : ['reference' => $reference, 'ambiguous_or_not_found' => true];
         }
 
-        return new SkillEvidence('entity_resolution', 'resolve branch-scoped business references', records: $records, warnings: ['Unresolved references are never guessed.']);
+        return new ZaakiySkillResult(
+            intent: 'entity_resolution',
+            subject: 'resolve branch-scoped business references',
+            records: $records,
+            warnings: ['Unresolved references are never guessed.'],
+            meta: ['branch_scoped' => true],
+        );
     }
 }
