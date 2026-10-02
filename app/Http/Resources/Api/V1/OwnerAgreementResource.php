@@ -21,7 +21,7 @@ class OwnerAgreementResource extends JsonResource
                 $rows = $this->installments->map(fn ($installment) => [
                     'id' => $installment->id, 'installment_no' => $installment->installment_no, 'due_date' => $installment->due_date?->format('Y-m-d'),
                     'amount' => $installment->amount, 'paid_amount' => $installment->paid_amount, 'balance' => number_format((float) $installment->amount - (float) $installment->paid_amount, 2, '.', ''),
-                    'payment_mode' => $installment->payment_mode, 'direction' => 'outward', 'status' => $installment->status, 'notes' => $installment->notes, 'is_extra' => false,
+                    'payment_mode' => $installment->payment_mode, 'category' => $installment->category, 'particulars' => $installment->particulars, 'transaction_reference' => $this->reference($installment->category, $installment->particulars, 'outward'), 'direction' => 'outward', 'status' => $installment->status, 'notes' => $installment->notes, 'is_extra' => false,
                     'receipt' => $this->receiptFor($installment->allocations, $installment->status),
                 ]);
 
@@ -61,6 +61,11 @@ class OwnerAgreementResource extends JsonResource
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
+    }
+
+    private function reference(string $category, string $particulars, string $direction): string
+    {
+        return implode('/', [$this->owner?->customer_code ?? 'CUSTOMER', $this->agreement_no, strtoupper($direction), strtoupper($category), $particulars]);
     }
 
     private function receiptFor($allocations, string $status): ?array

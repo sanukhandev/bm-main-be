@@ -45,6 +45,7 @@ class AgreementBoundaryTest extends TestCase
             'total_amount' => '12000.00',
             'payment_count' => 12,
             'payment_mode' => 'bank_transfer',
+            'installments' => $this->agreementInstallments(12),
         ])->assertCreated()->json('data');
         $this->assertSame('AED', $owner['currency_code']);
 
@@ -61,6 +62,7 @@ class AgreementBoundaryTest extends TestCase
             'currency_code' => 'AED',
             'payment_count' => 12,
             'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(12),
         ])->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
 
         $tenant = $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
@@ -75,6 +77,7 @@ class AgreementBoundaryTest extends TestCase
             'total_amount' => '24000.00',
             'payment_count' => 12,
             'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(12),
         ])->assertCreated()->json('data');
         $this->assertSame('AED', $tenant['currency_code']);
 

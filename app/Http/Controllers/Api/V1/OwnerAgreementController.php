@@ -41,7 +41,9 @@ class OwnerAgreementController extends Controller
 
         $agreement = DB::transaction(function () use ($data, $branchContext, $numbers, $schedules) {
             $propertyIds = $data['property_ids'];
+            $installments = $data['installments'];
             unset($data['property_ids']);
+            unset($data['installments']);
             $data['agreement_no'] ??= $numbers->next($branchContext->branch(), 'OWNER_AGREEMENT', (int) date('Y', strtotime($data['start_date'])));
             $agreement = new OwnerAgreement($data);
             $agreement->forceFill(['branch_id' => $branchContext->id(), 'status' => 'draft'])->save();
@@ -49,7 +51,7 @@ class OwnerAgreementController extends Controller
                 'branch_id' => $branchContext->id(),
                 'owner_customer_id' => $agreement->owner_customer_id,
             ]);
-            $schedules->create('owner', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode);
+            $schedules->create('owner', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode, $installments);
             app(AuditService::class)->record('owner_agreement.created', $agreement, null, [
                 'agreement_no' => $agreement->agreement_no,
                 'owner_customer_id' => $agreement->owner_customer_id,
@@ -62,7 +64,7 @@ class OwnerAgreementController extends Controller
             return $agreement;
         });
 
-        return new OwnerAgreementResource($agreement->load(['owner', 'properties']));
+        return new OwnerAgreementResource($agreement->load(['owner', 'properties', 'installments.allocations.transaction']));
     }
 
     public function show(OwnerAgreement $ownerAgreement): OwnerAgreementResource
@@ -72,7 +74,7 @@ class OwnerAgreementController extends Controller
         return new OwnerAgreementResource($ownerAgreement->load(['owner', 'properties', 'installments.allocations.transaction', 'disputes.comments', 'additionalPayments.accountTransaction']));
     }
 
-    public function update(UpdateOwnerAgreementRequest $request, OwnerAgreement $ownerAgreement, BranchContext $branchContext): OwnerAgreementResource
+    public function update(UpdateOwnerAgreementRequest $request, OwnerAgreement $ownerAgreement, BranchContext $branchContext, AgreementScheduleService $schedules): OwnerAgreementResource
     {
         Gate::authorize('update', $ownerAgreement);
         $data = $request->validated();
@@ -85,15 +87,21 @@ class OwnerAgreementController extends Controller
         }
 
         $before = $ownerAgreement->only(['agreement_no', 'owner_customer_id', 'start_date', 'end_date', 'status', 'total_amount']);
-        DB::transaction(function () use ($data, $ownerAgreement, $branchContext, $before) {
+        DB::transaction(function () use ($data, $ownerAgreement, $branchContext, $before, $schedules) {
             $propertyIds = $data['property_ids'] ?? null;
+            $installments = $data['installments'] ?? null;
             unset($data['property_ids']);
+            unset($data['installments']);
             $ownerAgreement->update($data);
             if ($propertyIds !== null) {
                 $ownerAgreement->properties()->syncWithPivotValues($propertyIds, [
                     'branch_id' => $branchContext->id(),
                     'owner_customer_id' => $ownerAgreement->owner_customer_id,
                 ]);
+            }
+            if ($installments !== null) {
+                $ownerAgreement->installments()->delete();
+                $schedules->create('owner', $ownerAgreement->id, $branchContext->id(), $ownerAgreement->start_date->format('Y-m-d'), $ownerAgreement->payment_count, $ownerAgreement->total_amount, $ownerAgreement->payment_frequency ?: 'monthly', $ownerAgreement->payment_mode, $installments);
             }
             $ownerAgreement->increment('lock_version');
             app(AuditService::class)->record('owner_agreement.updated', $ownerAgreement, $before, $ownerAgreement->only(['agreement_no', 'owner_customer_id', 'start_date', 'end_date', 'status', 'total_amount']));

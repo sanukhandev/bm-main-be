@@ -68,6 +68,7 @@ class AgreementLifecycleTest extends TestCase
             'currency_code' => 'AED',
             'payment_count' => 12,
             'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(12),
         ])->assertCreated()->json('data');
 
         $this->action('owner', $owner['id'], 'submit')->assertOk();
@@ -158,6 +159,7 @@ class AgreementLifecycleTest extends TestCase
         return $this->branchRequest()->postJson('/api/v1/owner-agreements', [
             'owner_customer_id' => $this->customerA, 'property_ids' => [$this->propertyId], 'start_date' => '2020-01-01',
             'end_date' => $endDate, 'total_amount' => '12000.00', 'currency_code' => 'AED', 'payment_count' => 12, 'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(12),
         ])->assertCreated()->json('data');
     }
 
@@ -168,6 +170,7 @@ class AgreementLifecycleTest extends TestCase
             'properties' => [['property_id' => $this->propertyId, 'source_owner_agreement_id' => $ownerAgreementId]],
             'start_date' => '2020-01-01', 'end_date' => $endDate, 'total_amount' => '24000.00', 'currency_code' => 'AED',
             'payment_count' => 12, 'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(12),
         ])->assertCreated()->json('data');
     }
 

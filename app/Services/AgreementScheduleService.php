@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 
 class AgreementScheduleService
 {
-    public function create(string $type, int $agreementId, int $branchId, string $startDate, int $count, string|int|float $total, string $frequency, string $paymentMode): void
+    public function create(string $type, int $agreementId, int $branchId, string $startDate, int $count, string|int|float $total, string $frequency, string $paymentMode, ?array $installments = null): void
     {
         $table = $type === 'owner' ? 'owner_agreement_installments' : 'tenant_agreement_installments';
         $foreignKey = $type === 'owner' ? 'owner_agreement_id' : 'tenant_agreement_id';
@@ -17,6 +17,7 @@ class AgreementScheduleService
         $date = CarbonImmutable::parse($startDate);
 
         for ($number = 1; $number <= $count; $number++) {
+            $line = $installments[$number - 1] ?? ['category' => 'rent', 'particulars' => 'Rent installment '.$number];
             $step = match ($frequency) {
                 'quarterly' => 3,
                 'semi-annually' => 6,
@@ -32,6 +33,8 @@ class AgreementScheduleService
                 'amount' => number_format($amount / 100, 2, '.', ''),
                 'paid_amount' => 0,
                 'payment_mode' => $paymentMode,
+                'category' => $line['category'],
+                'particulars' => $line['particulars'],
                 'status' => 'pending',
                 'created_at' => now(),
                 'updated_at' => now(),

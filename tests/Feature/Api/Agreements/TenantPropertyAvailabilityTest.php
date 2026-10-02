@@ -112,6 +112,7 @@ class TenantPropertyAvailabilityTest extends TestCase
             ],
             'start_date' => '2026-04-15', 'end_date' => '2026-05-15', 'total_amount' => '24000.00',
             'currency_code' => 'AED', 'payment_count' => 12, 'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(12),
         ];
 
         $this->branchRequest()->postJson('/api/v1/tenant-agreements', $payload)
@@ -126,6 +127,7 @@ class TenantPropertyAvailabilityTest extends TestCase
             'properties' => [['property_id' => $this->propertyA, 'source_owner_agreement_id' => $this->ownerAgreementId]],
             'start_date' => '2025-12-01', 'end_date' => '2026-02-01', 'total_amount' => '1000.00',
             'currency_code' => 'AED', 'payment_count' => 1, 'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(1),
         ];
         $this->branchRequest()->postJson('/api/v1/tenant-agreements', $payload)
             ->assertUnprocessable()->assertJsonPath('code', 'OWNER_AGREEMENT_DATE_COVERAGE_REQUIRED');
@@ -141,6 +143,7 @@ class TenantPropertyAvailabilityTest extends TestCase
             ],
             'start_date' => '2026-02-01', 'end_date' => '2026-03-31', 'total_amount' => '24000.00',
             'currency_code' => 'AED', 'payment_count' => 2, 'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(2),
         ])->assertCreated();
 
         $this->assertCount(2, $response->json('data.properties'));
