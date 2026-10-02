@@ -94,6 +94,7 @@ class SecurityHardeningTest extends TestCase
             'currency_code' => 'AED',
             'payment_count' => 12,
             'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(12),
         ])->assertCreated()->json('data');
 
         $this->branchRequest()->patchJson('/api/v1/owner-agreements/'.$agreement['id'], [
@@ -148,5 +149,37 @@ class SecurityHardeningTest extends TestCase
 
         $response->assertJsonPath('data.direction', 'inward');
         $this->assertNotSame('FORGED-DOCUMENT', $response->json('data.document_no'));
+    }
+
+    public function test_agreement_lifecycle_requires_management_permission(): void
+    {
+        $property = DB::table('properties')->insertGetId([
+            'branch_id' => $this->branchA,
+            'owner_customer_id' => $this->customerA,
+            'property_code' => 'A-SEC-PERM-001',
+            'property_type' => 'apartment',
+            'name' => 'Permission Property',
+            'status' => 'active',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $agreement = $this->branchRequest()->postJson('/api/v1/owner-agreements', [
+            'owner_customer_id' => $this->customerA,
+            'property_ids' => [$property],
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-12-31',
+            'total_amount' => '1000.00',
+            'currency_code' => 'AED',
+            'payment_count' => 1,
+            'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(1),
+        ])->assertCreated()->json('data');
+
+        $permissionId = DB::table('permissions')->where('key', 'agreements.manage')->value('id');
+        $roleId = DB::table('roles')->where('key', 'branch_admin')->value('id');
+        DB::table('role_permissions')->where('role_id', $roleId)->where('permission_id', $permissionId)->delete();
+
+        $this->branchRequest()->postJson('/api/v1/owner-agreements/'.$agreement['id'].'/submit')
+            ->assertForbidden();
     }
 }

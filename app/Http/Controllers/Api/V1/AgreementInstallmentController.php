@@ -57,9 +57,9 @@ class AgreementInstallmentController extends Controller
             if ((float) $installment->paid_amount > 0) {
                 throw new ApiException('FINANCIAL_RECORD_IMMUTABLE', 'An installment with posted payments cannot be marked defaulted.', 409);
             }
-            DB::table($table)->where('id', $installmentId)->update(['status' => $request->validated('status'), 'updated_at' => now()]);
+            DB::table($table)->where('branch_id', $context->id())->where($agreementKey, $agreementId)->where('id', $installmentId)->update(['status' => $request->validated('status'), 'updated_at' => now()]);
 
-            return DB::table($table)->where('id', $installmentId)->first();
+            return DB::table($table)->where('branch_id', $context->id())->where($agreementKey, $agreementId)->where('id', $installmentId)->first();
         });
 
         return ['data' => $result];

@@ -36,7 +36,7 @@ class ZaakiyController extends Controller
             } catch (Throwable $exception) {
                 report($exception);
                 echo 'event: error'."\n";
-                echo 'data: '.json_encode(['message' => $exception->getMessage() ?: 'Zaakiy is temporarily unavailable.'])."\n\n";
+                echo 'data: '.json_encode(['message' => 'Zaakiy is temporarily unavailable. Please try again shortly.'])."\n\n";
             }
         }, 200, [
             'Content-Type' => 'text/event-stream',

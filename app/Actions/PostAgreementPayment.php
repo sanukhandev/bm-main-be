@@ -92,7 +92,7 @@ class PostAgreementPayment
                 }
                 $balance = $this->cents((string) $installment->amount) - $this->cents((string) $installment->paid_amount);
                 $allocated = min($remaining, $balance);
-                DB::table($installmentTable)->where('id', $installment->id)->update([
+                DB::table($installmentTable)->where('branch_id', $branch->id)->where($installmentKey, $agreementId)->where('id', $installment->id)->update([
                     'paid_amount' => number_format(($this->cents((string) $installment->paid_amount) + $allocated) / 100, 2, '.', ''),
                     'status' => $allocated === $balance ? 'paid' : 'partially_paid',
                     'updated_at' => now(),

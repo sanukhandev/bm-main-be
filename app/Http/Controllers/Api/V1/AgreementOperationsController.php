@@ -59,7 +59,7 @@ class AgreementOperationsController extends Controller
     {
         $model = $type === 'owner' ? OwnerAgreement::class : TenantAgreement::class;
         $record = $model::query()->forBranch($context->id())->findOrFail($agreement);
-        Gate::authorize('view', $record);
+        Gate::authorize('lifecycle', $record);
 
         return ['data' => $action->execute($type, $agreement, $context->id(), $request->validated('status'), $request->validated('reason'), $request->user()->getAuthIdentifier())];
     }
