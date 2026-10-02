@@ -27,7 +27,7 @@ class UserResource extends JsonResource
     private function permissions(): array
     {
         if ($this->isSuperAdmin()) {
-            return ['accounts.view', 'accounts.post', 'accounts.void'];
+            return \DB::table('permissions')->orderBy('key')->pluck('key')->values()->all();
         }
 
         $roleIds = \DB::table('user_global_roles')->where('user_id', $this->id)->pluck('role_id')
