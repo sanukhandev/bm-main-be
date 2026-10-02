@@ -51,21 +51,21 @@ class ReadOrchestrator
             'intelligent_report' => $this->intelligentReport,
             'faq' => $this->faq,
         ];
-        $evidence = [];
+        $results = [];
         foreach ($intent->modules as $module) {
             $skill = $skills[$module] ?? null;
             if ($skill instanceof ZaakiySkill && $skill->matches($message)) {
-                $evidence[] = (new LegacySkillAdapter($module, $skill))->execute($execution)->toArray();
+                $results[] = (new LegacySkillAdapter($module, $skill))->execute($execution);
             }
         }
-        if ($evidence === []) {
-            $evidence[] = (new LegacySkillAdapter('general', $this->general))->execute($execution)->toArray();
+        if ($results === []) {
+            $results[] = (new LegacySkillAdapter('general', $this->general))->execute($execution);
         }
         $entityEvidence = $this->entities->resolve($message, $execution);
         if ($entityEvidence) {
-            $evidence[] = $entityEvidence->toArray();
+            $results[] = $entityEvidence;
         }
 
-        return $this->contextBuilder->build($intent, $execution, $evidence);
+        return $this->contextBuilder->build($intent, $execution, $results);
     }
 }
