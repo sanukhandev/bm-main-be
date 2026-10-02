@@ -114,4 +114,21 @@ class AuditTrailTest extends TestCase
             ->assertJsonPath('data.0.action', 'activity.viewed')
             ->assertJsonPath('data.0.branch.id', $this->branchB);
     }
+
+    public function test_super_admin_role_permissions_can_be_updated(): void
+    {
+        DB::table('user_global_roles')->insert([
+            'user_id' => $this->apiUser->id,
+            'role_id' => DB::table('roles')->where('key', 'super_admin')->value('id'),
+        ]);
+
+        $roleId = DB::table('roles')->where('key', 'super_admin')->value('id');
+        $this->branchRequest()->patchJson('/api/v1/admin/roles/'.$roleId, [
+            'name' => 'Super Admin',
+            'description' => 'Updated description',
+            'permission_keys' => ['audit.view'],
+        ])->assertOk()
+            ->assertJsonPath('data.description', 'Updated description')
+            ->assertJsonPath('data.permissions', ['audit.view']);
+    }
 }
