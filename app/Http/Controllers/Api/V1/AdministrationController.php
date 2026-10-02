@@ -5,12 +5,17 @@ namespace App\Http\Controllers\Api\V1;
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Administration\StoreBranchRequest;
+use App\Http\Requests\Api\V1\Administration\StorePermissionRequest;
+use App\Http\Requests\Api\V1\Administration\StoreRoleRequest;
 use App\Http\Requests\Api\V1\Administration\StoreUserRequest;
 use App\Http\Requests\Api\V1\Administration\UpdateBranchRequest;
+use App\Http\Requests\Api\V1\Administration\UpdatePermissionRequest;
+use App\Http\Requests\Api\V1\Administration\UpdateRoleRequest;
 use App\Http\Requests\Api\V1\Administration\UpdateUserRequest;
 use App\Http\Requests\Api\V1\Administration\UpdateUserStatusRequest;
 use App\Http\Resources\Api\V1\BranchResource;
 use App\Models\Branch;
+use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\AuditService;
@@ -133,13 +138,65 @@ class AdministrationController extends Controller
     {
         $this->ensureSuperAdmin($request);
 
-        return response()->json(['data' => Role::query()->orderBy('name')->get()->map(fn (Role $role) => [
-            'id' => $role->id,
-            'name' => $role->key,
-            'label' => $role->name,
-            'description' => $role->description,
-            'permissions' => [],
-        ])]);
+        return response()->json(['data' => Role::query()->with('permissions')->orderBy('name')->get()->map(fn (Role $role) => $this->rolePayload($role))]);
+    }
+
+    public function storeRole(StoreRoleRequest $request)
+    {
+        $data = $request->validated();
+        $role = DB::transaction(function () use ($data) {
+            $role = Role::query()->create([
+                'key' => $data['key'],
+                'name' => $data['name'],
+                'scope' => 'branch',
+                'description' => $data['description'] ?? null,
+                'is_system' => false,
+            ]);
+            $this->syncRolePermissions($role, $data['permission_keys'] ?? []);
+
+            return $role->load('permissions');
+        });
+
+        return response()->json(['data' => $this->rolePayload($role)], 201);
+    }
+
+    public function updateRole(UpdateRoleRequest $request, Role $role)
+    {
+        $data = $request->validated();
+        $role = DB::transaction(function () use ($data, $role) {
+            $role->update([
+                'name' => $data['name'],
+                'description' => $data['description'] ?? null,
+            ]);
+            if (array_key_exists('permission_keys', $data) && $role->key !== 'super_admin') {
+                $this->syncRolePermissions($role, $data['permission_keys']);
+            }
+
+            return $role->load('permissions');
+        });
+
+        return response()->json(['data' => $this->rolePayload($role)]);
+    }
+
+    public function permissions(Request $request)
+    {
+        $this->ensureSuperAdmin($request);
+
+        return response()->json(['data' => Permission::query()->orderBy('key')->get(['id', 'key', 'name'])]);
+    }
+
+    public function storePermission(StorePermissionRequest $request)
+    {
+        $permission = Permission::query()->create($request->validated());
+
+        return response()->json(['data' => $permission->only(['id', 'key', 'name'])], 201);
+    }
+
+    public function updatePermission(UpdatePermissionRequest $request, Permission $permission)
+    {
+        $permission->update($request->validated());
+
+        return response()->json(['data' => $permission->fresh()->only(['id', 'key', 'name'])]);
     }
 
     private function ensureSuperAdmin(Request $request): void
@@ -147,6 +204,25 @@ class AdministrationController extends Controller
         if (! $request->user()->isSuperAdmin()) {
             throw new ApiException('FORBIDDEN', 'Only super admins can access administration data.', 403);
         }
+    }
+
+    private function rolePayload(Role $role): array
+    {
+        return [
+            'id' => $role->id,
+            'name' => $role->key,
+            'label' => $role->name,
+            'description' => $role->description,
+            'scope' => $role->scope,
+            'is_system' => (bool) $role->is_system,
+            'permissions' => $role->permissions->pluck('key')->values()->all(),
+        ];
+    }
+
+    private function syncRolePermissions(Role $role, array $keys): void
+    {
+        $permissionIds = Permission::query()->whereIn('key', array_values(array_unique($keys)))->pluck('id');
+        $role->permissions()->sync($permissionIds);
     }
 
     private function nextBranchCode(string $emirate): string
