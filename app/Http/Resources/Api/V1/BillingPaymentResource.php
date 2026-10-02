@@ -17,6 +17,7 @@ class BillingPaymentResource extends JsonResource
         $parent = $this->resource instanceof QuotationPayment ? $this->quotation : $this->invoice;
         $document = $parent?->quotation_no ?? $parent?->invoice_no ?? 'DOCUMENT';
         $vendor = $parent?->vendor?->customer_code ?? 'CUSTOMER';
+
         return implode('/', [$vendor, $document, strtoupper((string) $this->direction), 'PAYMENT', $this->particulars]);
     }
 
