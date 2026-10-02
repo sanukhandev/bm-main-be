@@ -23,10 +23,10 @@ class OwnerAgreementResource extends JsonResource
                     $particulars = $installment->particulars ?: $installment->notes ?: 'Installment '.$installment->installment_no.' payment';
 
                     return [
-                    'id' => $installment->id, 'installment_no' => $installment->installment_no, 'due_date' => $installment->due_date?->format('Y-m-d'),
-                    'amount' => $installment->amount, 'paid_amount' => $installment->paid_amount, 'balance' => number_format((float) $installment->amount - (float) $installment->paid_amount, 2, '.', ''),
-                    'payment_mode' => $installment->payment_mode, 'category' => $category, 'particulars' => $particulars, 'transaction_reference' => $this->reference($category, $particulars, 'outward'), 'direction' => 'outward', 'status' => $installment->status, 'notes' => $installment->notes, 'is_extra' => false,
-                    'receipt' => $this->receiptFor($installment->allocations, $installment->status),
+                        'id' => $installment->id, 'installment_no' => $installment->installment_no, 'due_date' => $installment->due_date?->format('Y-m-d'),
+                        'amount' => $installment->amount, 'paid_amount' => $installment->paid_amount, 'balance' => number_format((float) $installment->amount - (float) $installment->paid_amount, 2, '.', ''),
+                        'payment_mode' => $installment->payment_mode, 'category' => $category, 'particulars' => $particulars, 'transaction_reference' => $this->reference($category, $particulars, 'outward'), 'direction' => 'outward', 'status' => $installment->status, 'notes' => $installment->notes, 'is_extra' => false,
+                        'receipt' => $this->receiptFor($installment->allocations, $installment->status),
                     ];
                 });
 
@@ -36,9 +36,9 @@ class OwnerAgreementResource extends JsonResource
                         $particulars = $line->particulars ?: 'Additional payment';
 
                         return [
-                        'id' => 'extra-'.$line->id, 'installment_no' => 'extra-'.$line->id, 'due_date' => $line->due_date?->format('Y-m-d'), 'amount' => $line->amount, 'paid_amount' => '0.00', 'balance' => $line->amount,
-                        'payment_mode' => $line->payment_mode, 'category' => $category, 'particulars' => $particulars, 'transaction_reference' => $this->reference($category, $particulars, $line->direction ?: 'outward'), 'direction' => $line->direction ?: 'outward', 'status' => $line->status, 'notes' => $particulars.' | '.$category, 'is_extra' => true,
-                        'receipt' => $this->receiptForAdditional($line),
+                            'id' => 'extra-'.$line->id, 'installment_no' => 'extra-'.$line->id, 'due_date' => $line->due_date?->format('Y-m-d'), 'amount' => $line->amount, 'paid_amount' => '0.00', 'balance' => $line->amount,
+                            'payment_mode' => $line->payment_mode, 'category' => $category, 'particulars' => $particulars, 'transaction_reference' => $this->reference($category, $particulars, $line->direction ?: 'outward'), 'direction' => $line->direction ?: 'outward', 'status' => $line->status, 'notes' => $particulars.' | '.$category, 'is_extra' => true,
+                            'receipt' => $this->receiptForAdditional($line),
                         ];
                     }))->values()
                     : $rows;
