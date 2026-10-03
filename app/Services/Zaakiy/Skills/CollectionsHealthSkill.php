@@ -143,7 +143,7 @@ final class CollectionsHealthSkill implements ZaakiyReadSkill
     {
         $query = $this->installmentQuery($branchId)->whereColumn('installments.paid_amount', '<', 'installments.amount');
         $query->when($overdue, fn ($builder) => $builder->whereDate('installments.due_date', '<', now()->toDateString()));
-        $query->selectRaw('agreements.tenant_customer_id as tenant_id, customers.customer_code, customers.display_name, SUM(installments.amount - installments.paid_amount) as balance, COUNT(DISTINCT agreements.id) as agreement_count');
+        $query->select([])->selectRaw('agreements.tenant_customer_id as tenant_id, customers.customer_code, customers.display_name, SUM(installments.amount - installments.paid_amount) as balance, COUNT(DISTINCT agreements.id) as agreement_count');
         if ($overdue) {
             $query->selectRaw('SUM(CASE WHEN installments.due_date < ? THEN installments.amount - installments.paid_amount ELSE 0 END) as overdue', [now()->toDateString()]);
         } else {
