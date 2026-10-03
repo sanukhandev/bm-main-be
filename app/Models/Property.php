@@ -27,6 +27,13 @@ class Property extends Model
         'state_or_emirate',
         'country_code',
         'area',
+        'electricity_provider',
+        'electricity_account_number',
+        'cooling_provider',
+        'cooling_account_number',
+        'gas_provider',
+        'gas_connection_type',
+        'gas_connection_number',
         'notes',
         'metadata_json',
     ];

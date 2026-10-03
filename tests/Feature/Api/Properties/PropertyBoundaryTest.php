@@ -179,4 +179,30 @@ class PropertyBoundaryTest extends TestCase
 
         $this->assertSame('E2E-A-DXB-AL-MADEENA-TOWER-101-APT', $property['property_code']);
     }
+
+    public function test_optional_uae_utility_details_are_saved_and_returned(): void
+    {
+        $property = $this->branchRequest()->postJson('/api/v1/properties', [
+            'owner_customer_id' => $this->customerA,
+            'property_type' => 'apartment',
+            'name' => 'Utility Property',
+            'electricity_provider' => 'dewa',
+            'electricity_account_number' => 'DEWA-123',
+            'cooling_provider' => 'empower',
+            'cooling_account_number' => 'EMP-456',
+            'gas_provider' => 'emirates_gas',
+            'gas_connection_type' => 'piped_gas',
+            'gas_connection_number' => 'GAS-789',
+        ])->assertCreated()->json('data');
+
+        $this->assertSame('dewa', $property['electricity_provider']);
+        $this->assertSame('empower', $property['cooling_provider']);
+        $this->assertSame('GAS-789', $property['gas_connection_number']);
+        $this->assertDatabaseHas('properties', [
+            'id' => $property['id'],
+            'electricity_account_number' => 'DEWA-123',
+            'cooling_account_number' => 'EMP-456',
+            'gas_connection_type' => 'piped_gas',
+        ]);
+    }
 }

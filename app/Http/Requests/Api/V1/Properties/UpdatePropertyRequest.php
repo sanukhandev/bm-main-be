@@ -31,6 +31,13 @@ class UpdatePropertyRequest extends FormRequest
             'state_or_emirate' => ['sometimes', 'nullable', 'string', 'max:255'],
             'country_code' => ['sometimes', 'nullable', 'string', 'size:2'],
             'area' => ['sometimes', 'nullable', 'numeric', 'min:0'],
+            'electricity_provider' => ['sometimes', 'nullable', 'string', Rule::in(['dewa', 'addc', 'aadc', 'sewa', 'etihadwe', 'other'])],
+            'electricity_account_number' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'cooling_provider' => ['sometimes', 'nullable', 'string', Rule::in(['empower', 'emicool', 'tabreed', 'nakheel', 'other'])],
+            'cooling_account_number' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'gas_provider' => ['sometimes', 'nullable', 'string', Rule::in(['emirates_gas', 'enoc', 'adnoc', 'lootah_gas', 'dubai_gas', 'other'])],
+            'gas_connection_type' => ['sometimes', 'nullable', 'string', Rule::in(['piped_gas', 'lpg_cylinder', 'bulk_lpg', 'other'])],
+            'gas_connection_number' => ['sometimes', 'nullable', 'string', 'max:100'],
             'notes' => ['sometimes', 'nullable', 'string'],
             'metadata_json' => ['sometimes', 'nullable', 'array'],
         ];
