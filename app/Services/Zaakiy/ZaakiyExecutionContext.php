@@ -3,6 +3,7 @@
 namespace App\Services\Zaakiy;
 
 use App\Models\User;
+use App\Services\Zaakiy\DTOs\ZaakiyConversationContext;
 use App\Support\Branch\BranchContext;
 
 final readonly class ZaakiyExecutionContext
@@ -12,6 +13,7 @@ final readonly class ZaakiyExecutionContext
         public BranchContext $branch,
         public IntentFrame $intent,
         public string $requestAt,
+        public ?ZaakiyConversationContext $conversation = null,
     ) {}
 
     public function branchId(): int

@@ -3,7 +3,9 @@
 namespace Tests\Feature\Api;
 
 use App\Models\Branch;
+use App\Services\Zaakiy\DTOs\ZaakiyConversationContext;
 use App\Services\Zaakiy\DTOs\ZaakiySkillResult;
+use App\Services\Zaakiy\EntityResolver;
 use App\Services\Zaakiy\IntentFrame;
 use App\Services\Zaakiy\LegacySkillAdapter;
 use App\Services\Zaakiy\Skills\AuditSkill;
@@ -42,5 +44,21 @@ class ZaakiySkillAuthorizationTest extends TestCase
         $this->assertSame('/app/administration/audit', $allowed->navigation[0]['route']);
         $this->assertTrue($restricted->summaryMetrics['restricted']);
         $this->assertSame([], $restricted->navigation);
+    }
+
+    public function test_client_context_cannot_reuse_an_entity_from_another_branch(): void
+    {
+        $branch = new BranchContext;
+        $branch->set(Branch::query()->findOrFail($this->branchA));
+        $intent = new IntentFrame('customer.profile', ['customers'], 'detail', question: 'show customer');
+        $execution = new ZaakiyExecutionContext($this->apiUser, $branch, $intent, now()->toIso8601String());
+        $context = new ZaakiyConversationContext(
+            entities: [['type' => 'customer', 'id' => $this->customerB, 'label' => 'spoofed']],
+            branchContext: ['branch_id' => $this->branchA],
+        );
+
+        $authorized = app(EntityResolver::class)->reauthorize($context, $execution);
+
+        $this->assertSame([], $authorized->entities);
     }
 }

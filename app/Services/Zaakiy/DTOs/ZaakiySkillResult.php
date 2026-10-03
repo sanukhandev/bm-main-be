@@ -20,6 +20,9 @@ final readonly class ZaakiySkillResult implements Arrayable, JsonSerializable
         public array $suggestedFollowups = [],
         public ?array $timeRange = null,
         public array $meta = [],
+        public array $trends = [],
+        public array $explanations = [],
+        public array $anomalies = [],
     ) {}
 
     public function toArray(): array
@@ -31,6 +34,9 @@ final readonly class ZaakiySkillResult implements Arrayable, JsonSerializable
             'records' => $this->records,
             'breakdowns' => $this->breakdowns,
             'comparisons' => $this->comparisons,
+            'trends' => $this->trends,
+            'explanations' => $this->explanations,
+            'anomalies' => $this->anomalies,
             'warnings' => $this->warnings,
             'sources' => $this->sources,
             'navigation' => $this->navigation,

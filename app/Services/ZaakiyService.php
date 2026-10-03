@@ -19,6 +19,7 @@ class ZaakiyService
         $contents = [];
         $skillData = $context;
         unset($skillData['navigation']);
+        unset($skillData['conversation_context']);
         $skillData['evidence'] = array_map(static function (array $result): array {
             unset($result['navigation'], $result['suggested_followups']);
 
