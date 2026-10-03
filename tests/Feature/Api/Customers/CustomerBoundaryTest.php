@@ -104,6 +104,60 @@ class CustomerBoundaryTest extends TestCase
             ->assertJsonPath('data.0.id', $this->customerA);
     }
 
+    public function test_phone_numbers_support_multiple_typed_values_and_legacy_phone_fallback(): void
+    {
+        $this->app['db']->table('customers')->where('id', $this->customerA)->update(['phone' => '+971 50 000 0001']);
+        $this->branchRequest()->getJson('/api/v1/customers/'.$this->customerA)
+            ->assertOk()
+            ->assertJsonPath('data.phone_numbers.0.type', 'contact')
+            ->assertJsonPath('data.phone_numbers.0.number', '+971 50 000 0001');
+
+        $customer = $this->branchRequest()->postJson('/api/v1/customers', [
+            'customer_type' => 'individual',
+            'display_name' => 'Multiple Phones',
+            'phone_numbers' => [
+                ['type' => 'contact', 'number' => '+971 50 000 0002'],
+                ['type' => 'whatsapp', 'number' => '+971 50 000 0003'],
+                ['type' => 'landline', 'number' => '+971 4 000 0004'],
+            ],
+        ])->assertCreated()->json('data');
+
+        $this->assertCount(3, $customer['phone_numbers']);
+        $this->assertSame('+971 50 000 0002', $customer['phone']);
+        $this->assertSame(
+            '+971 50 000 0002',
+            json_decode($this->app['db']->table('customers')->where('id', $customer['id'])->value('phone_numbers_json'), true)[0]['number'],
+        );
+    }
+
+    public function test_owner_can_have_optional_representative_but_tenant_cannot(): void
+    {
+        $owner = $this->branchRequest()->postJson('/api/v1/customers', [
+            'customer_type' => 'individual',
+            'display_name' => 'Owner With Representative',
+            'roles' => ['owner'],
+            'representative' => [
+                'name' => 'Owner Son',
+                'relationship' => 'son',
+                'phone' => '+971 50 000 0005',
+                'identity_no' => '784-1990-1234567-1',
+            ],
+        ])->assertCreated()->json('data');
+
+        $this->assertSame('Owner Son', $owner['representative']['name']);
+        $this->assertSame('784-1990-1234567-1', $owner['representative']['identity_no']);
+
+        $this->branchRequest()->postJson('/api/v1/customers', [
+            'customer_type' => 'individual',
+            'display_name' => 'Tenant With Representative',
+            'roles' => ['tenant'],
+            'representative' => [
+                'name' => 'Tenant Relative',
+                'identity_no' => '784-1990-1234567-1',
+            ],
+        ])->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
+    }
+
     public function test_vendors_are_customer_records_and_legacy_directory_uses_them(): void
     {
         $vendor = $this->branchRequest()->postJson('/api/v1/customers', [

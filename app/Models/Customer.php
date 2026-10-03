@@ -22,6 +22,8 @@ class Customer extends Model
         'display_name',
         'legal_name',
         'phone',
+        'phone_numbers_json',
+        'representative_json',
         'email',
         'tax_registration_no',
         'identity_no',
@@ -39,6 +41,8 @@ class Customer extends Model
     {
         return [
             'metadata_json' => 'array',
+            'phone_numbers_json' => 'array',
+            'representative_json' => 'array',
             'identity_verified_at' => 'datetime',
         ];
     }
@@ -56,5 +60,14 @@ class Customer extends Model
     public function scopeForBranch(Builder $query, int $branchId): Builder
     {
         return $query->where($query->getModel()->qualifyColumn('branch_id'), $branchId);
+    }
+
+    public function phoneNumbers(): array
+    {
+        if (is_array($this->phone_numbers_json) && count($this->phone_numbers_json) > 0) {
+            return $this->phone_numbers_json;
+        }
+
+        return $this->phone ? [['type' => 'contact', 'number' => $this->phone]] : [];
     }
 }
