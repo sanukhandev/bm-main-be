@@ -92,7 +92,7 @@ class CustomerController extends Controller
                 $customer->forceFill(['identity_verified_at' => now()])->save();
             }
             $this->syncRoles($customer, $roles, $branchContext->id());
-            app(AuditService::class)->record('customer.created', $customer, null, [...$customer->only(['customer_code', 'display_name', 'customer_type', 'representative_json', 'status']), 'roles' => $roles], [], $branchContext->id());
+            app(AuditService::class)->record('customer.created', $customer, null, [...$customer->only(['customer_code', 'display_name', 'customer_type', 'phone', 'phone_numbers_json', 'representative_json', 'status']), 'roles' => $roles], [], $branchContext->id());
 
             return $customer;
         });
@@ -130,9 +130,9 @@ class CustomerController extends Controller
         }
         $roles = $data['roles'] ?? null;
         unset($data['roles']);
-        $this->applyPhoneNumbers($data);
+        $this->applyPhoneNumbers($data, $customer);
         $effectiveRoles = $roles ?? $customer->businessRoles()->pluck('role')->all();
-        $this->applyRepresentative($data, $effectiveRoles);
+        $this->applyRepresentative($data, $effectiveRoles, $customer);
         DB::transaction(function () use ($customer, $data, $roles): void {
             $before = [...$customer->only(['customer_code', 'display_name', 'customer_type', 'status', 'phone', 'phone_numbers_json', 'representative_json', 'email']), 'roles' => $customer->businessRoles()->pluck('role')->values()->all()];
             $customer->update($data);
@@ -154,21 +154,44 @@ class CustomerController extends Controller
         return response()->noContent();
     }
 
-    private function applyPhoneNumbers(array &$data): void
+    private function applyPhoneNumbers(array &$data, ?Customer $customer = null): void
     {
-        if (! array_key_exists('phone_numbers', $data)) {
+        if (array_key_exists('phone_numbers', $data)) {
+            $numbers = array_values(array_filter($data['phone_numbers'] ?? [], static fn (array $number): bool => trim((string) ($number['number'] ?? '')) !== ''));
+            $data['phone_numbers_json'] = $numbers ?: null;
+            $data['phone'] = $numbers[0]['number'] ?? null;
+            unset($data['phone_numbers']);
+
             return;
         }
 
-        $numbers = array_values(array_filter($data['phone_numbers'] ?? [], static fn (array $number): bool => trim((string) ($number['number'] ?? '')) !== ''));
-        $data['phone_numbers_json'] = $numbers ?: null;
-        $data['phone'] = $numbers[0]['number'] ?? null;
-        unset($data['phone_numbers']);
+        if (! array_key_exists('phone', $data)) {
+            return;
+        }
+
+        $phone = trim((string) ($data['phone'] ?? ''));
+        $data['phone'] = $phone !== '' ? $phone : null;
+        if ($phone === '') {
+            $data['phone_numbers_json'] = null;
+            return;
+        }
+
+        $numbers = is_array($customer?->phone_numbers_json) ? array_values($customer->phone_numbers_json) : [];
+        if ($numbers && is_array($numbers[0] ?? null)) {
+            $numbers[0]['number'] = $phone;
+        } else {
+            $numbers = [['type' => 'contact', 'number' => $phone]];
+        }
+        $data['phone_numbers_json'] = $numbers;
     }
 
-    private function applyRepresentative(array &$data, array $roles): void
+    private function applyRepresentative(array &$data, array $roles, ?Customer $customer = null): void
     {
         if (! array_key_exists('representative', $data)) {
+            if ($customer && ! in_array('owner', $roles, true) && $customer->representative_json !== null) {
+                $data['representative_json'] = null;
+            }
+
             return;
         }
 

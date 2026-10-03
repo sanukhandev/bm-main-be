@@ -35,7 +35,17 @@ class MaintenanceController extends Controller
     public function vendors(Request $request, BranchContext $context)
     {
         $query = Customer::query()->forBranch($context->id())->with('businessRoles')->whereHas('businessRoles', fn ($roles) => $roles->where('role', 'vendor'))
-            ->when($request->query('search'), fn ($q, $v) => $q->where(fn ($search) => $search->where('display_name', 'like', "%{$v}%")->orWhere('phone', 'like', "%{$v}%")->orWhere('email', 'like', "%{$v}%")))
+            ->when($request->query('search'), function ($q, $value) {
+                $phoneSearch = preg_replace('/\D+/', '', $value) ?? '';
+                $q->where(function ($search) use ($value, $phoneSearch) {
+                    $search->where('display_name', 'like', "%{$value}%")
+                        ->orWhere('phone', 'like', "%{$value}%")
+                        ->orWhere('email', 'like', "%{$value}%");
+                    if ($phoneSearch !== '') {
+                        $search->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone_numbers_json, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ?", ["%{$phoneSearch}%"]);
+                    }
+                });
+            })
             ->latest();
 
         return VendorResource::collection($query->paginate(25));
@@ -45,7 +55,8 @@ class MaintenanceController extends Controller
     {
         $data = $request->validated();
         $vendor = DB::transaction(function () use ($data, $context, $numbers, $audit, $request) {
-            $customer = new Customer(['customer_code' => $numbers->next($context->branch(), 'VENDOR_CUSTOMER', (int) now()->format('Y')), 'customer_type' => $data['customer_type'] ?? 'organization', 'display_name' => $data['name'], 'phone' => $data['phone'] ?? null, 'email' => $data['email'] ?? null]);
+            $phone = trim((string) ($data['phone'] ?? ''));
+            $customer = new Customer(['customer_code' => $numbers->next($context->branch(), 'VENDOR_CUSTOMER', (int) now()->format('Y')), 'customer_type' => $data['customer_type'] ?? 'organization', 'display_name' => $data['name'], 'phone' => $phone !== '' ? $phone : null, 'phone_numbers_json' => $phone !== '' ? [['type' => 'contact', 'number' => $phone]] : null, 'email' => $data['email'] ?? null]);
             $customer->forceFill(['branch_id' => $context->id(), 'status' => $data['status'] ?? 'active'])->save();
             CustomerRoleAssignment::query()->create(['branch_id' => $context->id(), 'customer_id' => $customer->id, 'role' => 'vendor']);
             $audit->record('customer.created', $customer, null, ['customer_code' => $customer->customer_code, 'display_name' => $customer->display_name, 'roles' => ['vendor']], [], $context->id(), $request->user()->getAuthIdentifier());
@@ -61,7 +72,15 @@ class MaintenanceController extends Controller
         $record = Customer::query()->forBranch($context->id())->whereHas('businessRoles', fn ($roles) => $roles->where('role', 'vendor'))->findOrFail($vendor);
         $data = $request->validated();
         $before = $record->only(['display_name', 'phone', 'email', 'status']);
-        $record->update(['display_name' => $data['name'], 'phone' => $data['phone'] ?? null, 'email' => $data['email'] ?? null, 'status' => $data['status'] ?? $record->status]);
+        $phone = trim((string) ($data['phone'] ?? ''));
+        $phoneNumbers = null;
+        if ($phone !== '') {
+            $phoneNumbers = is_array($record->phone_numbers_json) && is_array($record->phone_numbers_json[0] ?? null)
+                ? array_values($record->phone_numbers_json)
+                : [['type' => 'contact', 'number' => $phone]];
+            $phoneNumbers[0]['number'] = $phone;
+        }
+        $record->update(['display_name' => $data['name'], 'phone' => $phone !== '' ? $phone : null, 'phone_numbers_json' => $phoneNumbers, 'email' => $data['email'] ?? null, 'status' => $data['status'] ?? $record->status]);
         $audit->record('customer.updated', $record, [...$before, 'role' => 'vendor'], [...$record->only(['display_name', 'phone', 'email', 'status']), 'role' => 'vendor'], [], $context->id(), request()->user()->getAuthIdentifier());
 
         return new VendorResource($record->refresh());

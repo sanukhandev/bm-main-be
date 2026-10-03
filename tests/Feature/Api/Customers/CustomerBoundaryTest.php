@@ -132,6 +132,13 @@ class CustomerBoundaryTest extends TestCase
         $this->branchRequest()->getJson('/api/v1/customers?search=%2B971500000003')
             ->assertOk()
             ->assertJsonFragment(['id' => $customer['id']]);
+
+        $this->branchRequest()->patchJson('/api/v1/customers/'.$customer['id'], [
+            'phone' => '+971 50 000 0099',
+        ])->assertOk()
+            ->assertJsonPath('data.phone', '+971 50 000 0099')
+            ->assertJsonPath('data.phone_numbers.0.number', '+971 50 000 0099')
+            ->assertJsonPath('data.phone_numbers.1.number', '+971 50 000 0003');
     }
 
     public function test_owner_can_have_optional_representative_but_tenant_cannot(): void
@@ -150,6 +157,10 @@ class CustomerBoundaryTest extends TestCase
 
         $this->assertSame('Owner Son', $owner['representative']['name']);
         $this->assertSame('784-1990-1234567-1', $owner['representative']['identity_no']);
+
+        $this->branchRequest()->patchJson('/api/v1/customers/'.$owner['id'], [
+            'roles' => ['tenant'],
+        ])->assertOk()->assertJsonPath('data.representative', null);
 
         $this->branchRequest()->postJson('/api/v1/customers', [
             'customer_type' => 'individual',
