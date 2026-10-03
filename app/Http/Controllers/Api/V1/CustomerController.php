@@ -173,6 +173,7 @@ class CustomerController extends Controller
         $data['phone'] = $phone !== '' ? $phone : null;
         if ($phone === '') {
             $data['phone_numbers_json'] = null;
+
             return;
         }
 
