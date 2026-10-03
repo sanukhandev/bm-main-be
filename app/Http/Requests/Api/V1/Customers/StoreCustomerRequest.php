@@ -16,7 +16,11 @@ class StoreCustomerRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $code = trim((string) $this->input('customer_code', ''));
-        $this->merge(['customer_code' => $code !== '' ? strtoupper($code) : null]);
+        $data = ['customer_code' => $code !== '' ? strtoupper($code) : null];
+        if ($this->input('customer_type') === 'organization' && $this->has('identity_no')) {
+            $data['identity_no'] = strtoupper(preg_replace('/\s+/', '', trim((string) $this->input('identity_no'))));
+        }
+        $this->merge($data);
     }
 
     public function rules(): array
@@ -32,7 +36,9 @@ class StoreCustomerRequest extends FormRequest
             'phone' => ['nullable', 'string', 'max:50'],
             'email' => ['nullable', 'email', 'max:255'],
             'tax_registration_no' => ['nullable', 'string', 'max:100'],
-            'identity_no' => ['nullable', 'string', 'max:100'],
+            'identity_no' => array_merge(['nullable', 'string', 'max:100'], $this->input('customer_type') === 'organization'
+                ? ['regex:/^[A-Z0-9][A-Z0-9\/-]{4,49}$/i']
+                : []),
             'identity_verification_token' => ['sometimes', 'nullable', 'string'],
             'company_registration_no' => ['nullable', 'string', 'max:100'],
             'address_line_1' => ['nullable', 'string', 'max:255'],
@@ -44,5 +50,10 @@ class StoreCustomerRequest extends FormRequest
             'roles' => ['sometimes', 'array', 'min:1'],
             'roles.*' => ['required', 'in:owner,tenant,vendor', 'distinct'],
         ];
+    }
+
+    public function messages(): array
+    {
+        return ['identity_no.regex' => 'Trade Licence number must be 5-50 letters, numbers, / or -.'];
     }
 }
