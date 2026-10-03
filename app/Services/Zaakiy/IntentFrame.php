@@ -18,6 +18,9 @@ final readonly class IntentFrame
         public int $limit = 10,
         public ?string $sort = null,
         public string $question = '',
+        public bool $comparisonRequested = false,
+        public bool $explanationRequested = false,
+        public bool $anomalyRequested = false,
     ) {}
 
     public function toArray(): array
@@ -36,5 +39,10 @@ final readonly class IntentFrame
             'limit' => $this->limit,
             'sort' => $this->sort,
         ], static fn ($value) => $value !== null && $value !== []);
+    }
+
+    public function withTimeRange(?array $range, ?array $filters = null): self
+    {
+        return new self($this->intent, $this->modules, $this->operation, $this->entities, $this->metrics, $filters ?? $this->filters, $range, null, $this->detailLevel, $this->searchText, $this->limit, $this->sort, $this->question, false, $this->explanationRequested, $this->anomalyRequested);
     }
 }

@@ -13,8 +13,8 @@ class ZaakiyContextService
         private readonly ReadOrchestrator $orchestrator,
     ) {}
 
-    public function build(string $message, User $user, array $history = []): array
+    public function build(string $message, User $user, array $history = [], ?array $conversationContext = null): array
     {
-        return $this->orchestrator->build($message, $history, $user, $this->branchContext);
+        return $this->orchestrator->build($message, $history, $user, $this->branchContext, $conversationContext);
     }
 }
