@@ -75,6 +75,8 @@ class CustomerController extends Controller
         unset($data['identity_verification_token']);
         $roles = $data['roles'] ?? [];
         unset($data['roles']);
+        $this->applyPhoneNumbers($data);
+        $this->applyRepresentative($data, $roles);
         $data['customer_code'] ??= $numbers->next($branchContext->branch(), in_array('owner', $roles, true) ? 'OWNER_CUSTOMER' : (in_array('vendor', $roles, true) ? 'VENDOR_CUSTOMER' : 'TENANT_CUSTOMER'), (int) now()->format('Y'));
         $actor = $request->user();
         $customer = DB::transaction(function () use ($data, $roles, $branchContext, $identityVerificationToken, $verification, $actor): Customer {
@@ -88,7 +90,7 @@ class CustomerController extends Controller
                 $customer->forceFill(['identity_verified_at' => now()])->save();
             }
             $this->syncRoles($customer, $roles, $branchContext->id());
-            app(AuditService::class)->record('customer.created', $customer, null, [...$customer->only(['customer_code', 'display_name', 'customer_type', 'status']), 'roles' => $roles], [], $branchContext->id());
+            app(AuditService::class)->record('customer.created', $customer, null, [...$customer->only(['customer_code', 'display_name', 'customer_type', 'representative_json', 'status']), 'roles' => $roles], [], $branchContext->id());
 
             return $customer;
         });
@@ -126,13 +128,16 @@ class CustomerController extends Controller
         }
         $roles = $data['roles'] ?? null;
         unset($data['roles']);
+        $this->applyPhoneNumbers($data);
+        $effectiveRoles = $roles ?? $customer->businessRoles()->pluck('role')->all();
+        $this->applyRepresentative($data, $effectiveRoles);
         DB::transaction(function () use ($customer, $data, $roles): void {
-            $before = [...$customer->only(['customer_code', 'display_name', 'customer_type', 'status', 'phone', 'email']), 'roles' => $customer->businessRoles()->pluck('role')->values()->all()];
+            $before = [...$customer->only(['customer_code', 'display_name', 'customer_type', 'status', 'phone', 'phone_numbers_json', 'representative_json', 'email']), 'roles' => $customer->businessRoles()->pluck('role')->values()->all()];
             $customer->update($data);
             if ($roles !== null) {
                 $this->syncRoles($customer, $roles, $customer->branch_id);
             }
-            app(AuditService::class)->record('customer.updated', $customer, $before, [...$customer->only(['customer_code', 'display_name', 'customer_type', 'status', 'phone', 'email']), 'roles' => $roles ?? $before['roles']], [], $customer->branch_id);
+            app(AuditService::class)->record('customer.updated', $customer, $before, [...$customer->only(['customer_code', 'display_name', 'customer_type', 'status', 'phone', 'phone_numbers_json', 'representative_json', 'email']), 'roles' => $roles ?? $before['roles']], [], $customer->branch_id);
         });
 
         return new CustomerResource($customer->refresh()->load('businessRoles'));
@@ -145,6 +150,32 @@ class CustomerController extends Controller
         $customer->delete();
 
         return response()->noContent();
+    }
+
+    private function applyPhoneNumbers(array &$data): void
+    {
+        if (! array_key_exists('phone_numbers', $data)) {
+            return;
+        }
+
+        $numbers = array_values(array_filter($data['phone_numbers'] ?? [], static fn (array $number): bool => trim((string) ($number['number'] ?? '')) !== ''));
+        $data['phone_numbers_json'] = $numbers ?: null;
+        $data['phone'] = $numbers[0]['number'] ?? null;
+        unset($data['phone_numbers']);
+    }
+
+    private function applyRepresentative(array &$data, array $roles): void
+    {
+        if (! array_key_exists('representative', $data)) {
+            return;
+        }
+
+        if (! in_array('owner', $roles, true) && ! empty($data['representative'])) {
+            throw ValidationException::withMessages(['representative' => 'Representatives are supported for owners only.']);
+        }
+
+        $data['representative_json'] = $data['representative'] ?: null;
+        unset($data['representative']);
     }
 
     private function syncRoles(Customer $customer, array $roles, int $branchId): void
