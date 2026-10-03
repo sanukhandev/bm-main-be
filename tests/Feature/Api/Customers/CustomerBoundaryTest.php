@@ -128,6 +128,10 @@ class CustomerBoundaryTest extends TestCase
             '+971 50 000 0002',
             json_decode($this->app['db']->table('customers')->where('id', $customer['id'])->value('phone_numbers_json'), true)[0]['number'],
         );
+
+        $this->branchRequest()->getJson('/api/v1/customers?search=%2B971500000003')
+            ->assertOk()
+            ->assertJsonFragment(['id' => $customer['id']]);
     }
 
     public function test_owner_can_have_optional_representative_but_tenant_cannot(): void

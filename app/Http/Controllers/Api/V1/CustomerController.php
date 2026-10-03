@@ -50,7 +50,9 @@ class CustomerController extends Controller
                     ->orWhere('customer_code', 'like', "%{$search}%")
                     ->orWhere('email', 'like', "%{$search}%");
                 if ($phoneSearch !== '') {
-                    $query->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ?", ["%{$phoneSearch}%"]);
+                    $phonePattern = "%{$phoneSearch}%";
+                    $query->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ?", [$phonePattern])
+                        ->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone_numbers_json, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ?", [$phonePattern]);
                 }
             });
         }
