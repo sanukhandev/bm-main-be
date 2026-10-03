@@ -63,6 +63,23 @@ class CustomerBoundaryTest extends TestCase
         ]);
     }
 
+    public function test_organization_identity_field_accepts_and_formats_trade_license_number(): void
+    {
+        $customer = $this->branchRequest()->postJson('/api/v1/customers', [
+            'customer_type' => 'organization',
+            'display_name' => 'Trade Licence Organization',
+            'identity_no' => ' ab 12-34 ',
+            'tax_registration_no' => null,
+        ])->assertCreated()->json('data');
+
+        $this->assertSame('AB12-34', $customer['identity_no']);
+        $this->assertNull($customer['tax_registration_no']);
+
+        $this->branchRequest()->patchJson('/api/v1/customers/'.$customer['id'], [
+            'identity_no' => 'bad trade licence value!',
+        ])->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
+    }
+
     public function test_owner_and_tenant_codes_are_generated_when_blank(): void
     {
         $owner = $this->branchRequest()->postJson('/api/v1/customers', [
