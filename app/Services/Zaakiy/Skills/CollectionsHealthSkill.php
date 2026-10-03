@@ -129,7 +129,7 @@ final class CollectionsHealthSkill implements ZaakiyReadSkill
         if ($overdue) {
             $query->whereDate('installments.due_date', '<', now()->toDateString());
         }
-        $totals = (clone $query)->selectRaw('COALESCE(SUM(installments.amount - installments.paid_amount), 0) as total, COUNT(*) as installment_count, COUNT(DISTINCT agreements.tenant_customer_id) as tenant_count, COUNT(DISTINCT agreements.id) as agreement_count')->first();
+        $totals = (clone $query)->select([])->selectRaw('COALESCE(SUM(installments.amount - installments.paid_amount), 0) as total, COUNT(*) as installment_count, COUNT(DISTINCT agreements.tenant_customer_id) as tenant_count, COUNT(DISTINCT agreements.id) as agreement_count')->first();
 
         return [
             $overdue ? 'overdue_total' : 'outstanding_total' => number_format((float) $totals->total, 2, '.', ''),
@@ -166,7 +166,7 @@ final class CollectionsHealthSkill implements ZaakiyReadSkill
     private function upcoming(int $branchId, array $range, array &$records, array &$sources): array
     {
         $query = $this->installmentQuery($branchId)->whereColumn('installments.paid_amount', '<', 'installments.amount')->whereBetween('installments.due_date', [$range['from'], $range['to']])->orderBy('installments.due_date')->limit(20);
-        $totals = (clone $query)->selectRaw('COALESCE(SUM(installments.amount - installments.paid_amount), 0) as due_amount, COUNT(*) as installment_count, COUNT(DISTINCT agreements.tenant_customer_id) as tenant_count')->first();
+        $totals = (clone $query)->select([])->selectRaw('COALESCE(SUM(installments.amount - installments.paid_amount), 0) as due_amount, COUNT(*) as installment_count, COUNT(DISTINCT agreements.tenant_customer_id) as tenant_count')->first();
         foreach ($query->get() as $line) {
             $records[] = ['type' => 'due_installment', 'id' => $line->installment_id, 'tenant' => ['id' => $line->tenant_id, 'customer_code' => $line->customer_code, 'display_name' => $line->display_name], 'tenant_agreement' => ['id' => $line->agreement_id, 'agreement_no' => $line->agreement_no], 'property' => ['property_code' => $line->property_code], 'installment_no' => $line->installment_no, 'due_date' => $line->due_date, 'amount' => $line->amount, 'paid_amount' => $line->paid_amount, 'balance' => number_format((float) $line->amount - (float) $line->paid_amount, 2, '.', ''), 'payment_mode' => $line->payment_mode];
             $sources[] = $this->source('installment', $line->installment_id, 'Installment '.$line->installment_no);
@@ -210,7 +210,7 @@ final class CollectionsHealthSkill implements ZaakiyReadSkill
             } else {
                 $query->whereDate('installments.due_date', '<=', $to);
             }
-            $totals = $query->selectRaw('COALESCE(SUM(installments.amount), 0) as scheduled, COALESCE(SUM(installments.paid_amount), 0) as paid')->first();
+            $totals = $query->select([])->selectRaw('COALESCE(SUM(installments.amount), 0) as scheduled, COALESCE(SUM(installments.paid_amount), 0) as paid')->first();
             $result[] = ['bucket' => $bucket, 'amount' => number_format((float) $totals->scheduled - (float) $totals->paid, 2, '.', '')];
         }
 
