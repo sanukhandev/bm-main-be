@@ -31,6 +31,13 @@ class StorePropertyRequest extends FormRequest
             'state_or_emirate' => ['nullable', 'string', 'max:255'],
             'country_code' => ['nullable', 'string', 'size:2'],
             'area' => ['nullable', 'numeric', 'min:0'],
+            'electricity_provider' => ['nullable', 'string', Rule::in(['dewa', 'addc', 'aadc', 'sewa', 'etihadwe', 'other'])],
+            'electricity_account_number' => ['nullable', 'string', 'max:100'],
+            'cooling_provider' => ['nullable', 'string', Rule::in(['empower', 'emicool', 'tabreed', 'nakheel', 'other'])],
+            'cooling_account_number' => ['nullable', 'string', 'max:100'],
+            'gas_provider' => ['nullable', 'string', Rule::in(['emirates_gas', 'enoc', 'adnoc', 'lootah_gas', 'dubai_gas', 'other'])],
+            'gas_connection_type' => ['nullable', 'string', Rule::in(['piped_gas', 'lpg_cylinder', 'bulk_lpg', 'other'])],
+            'gas_connection_number' => ['nullable', 'string', 'max:100'],
             'notes' => ['nullable', 'string'],
             'metadata_json' => ['nullable', 'array'],
         ];
