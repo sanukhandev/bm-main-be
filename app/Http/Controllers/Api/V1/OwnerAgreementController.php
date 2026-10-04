@@ -59,7 +59,7 @@ class OwnerAgreementController extends Controller
                 'end_date' => $agreement->end_date?->toDateString(),
                 'status' => $agreement->status,
                 'total_amount' => $agreement->total_amount,
-            ]);
+            ], ['installments' => collect($installments)->map(fn (array $line) => collect($line)->only(['installment_no', 'due_date', 'amount', 'category', 'particulars'])->all())->all()]);
 
             return $agreement;
         });
@@ -104,10 +104,16 @@ class OwnerAgreementController extends Controller
                 $schedules->create('owner', $ownerAgreement->id, $branchContext->id(), $ownerAgreement->start_date->format('Y-m-d'), $ownerAgreement->payment_count, $ownerAgreement->total_amount, $ownerAgreement->payment_frequency ?: 'monthly', $ownerAgreement->payment_mode, $installments);
             }
             $ownerAgreement->increment('lock_version');
-            app(AuditService::class)->record('owner_agreement.updated', $ownerAgreement, $before, $ownerAgreement->only(['agreement_no', 'owner_customer_id', 'start_date', 'end_date', 'status', 'total_amount']));
+            app(AuditService::class)->record(
+                'owner_agreement.updated',
+                $ownerAgreement,
+                $before,
+                $ownerAgreement->only(['agreement_no', 'owner_customer_id', 'start_date', 'end_date', 'status', 'total_amount']),
+                $installments === null ? [] : ['installments' => collect($installments)->map(fn (array $line) => collect($line)->only(['installment_no', 'due_date', 'amount', 'category', 'particulars'])->all())->all()],
+            );
         });
 
-        return new OwnerAgreementResource($ownerAgreement->refresh()->load(['owner', 'properties']));
+        return new OwnerAgreementResource($ownerAgreement->refresh()->load(['owner', 'properties', 'installments.allocations.transaction']));
     }
 
     public function destroy(DeleteAgreementRequest $request, OwnerAgreement $ownerAgreement, BranchContext $branchContext, AgreementLifecycleService $lifecycle): OwnerAgreementResource

@@ -2,12 +2,15 @@
 
 namespace App\Http\Requests\Api\V1\Agreements;
 
+use App\Http\Requests\Api\V1\Agreements\Concerns\ValidatesAgreementInstallments;
 use App\Support\Branch\BranchContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpdateOwnerAgreementRequest extends FormRequest
 {
+    use ValidatesAgreementInstallments;
+
     public function authorize(): bool
     {
         return true;
@@ -32,6 +35,8 @@ class UpdateOwnerAgreementRequest extends FormRequest
             'payment_mode' => ['sometimes', 'required', 'in:cash,cheque,bank_transfer'],
             'installments' => ['sometimes', 'array'],
             'installments.*.installment_no' => ['required', 'integer', 'distinct', 'min:1'],
+            'installments.*.due_date' => ['sometimes', 'date_format:Y-m-d'],
+            'installments.*.amount' => ['sometimes', 'numeric', 'min:0.01', 'decimal:0,2'],
             'installments.*.category' => ['required', 'in:rent,security,commission'],
             'installments.*.particulars' => ['required', 'string', 'max:255'],
             'terms_text' => ['sometimes', 'nullable', 'string'],
@@ -54,10 +59,13 @@ class UpdateOwnerAgreementRequest extends FormRequest
             }
             $agreement = $this->route('owner_agreement');
             $count = (int) $this->input('payment_count', $agreement?->payment_count);
-            $numbers = collect($this->input('installments', []))->pluck('installment_no')->sort()->values()->all();
-            if (count($numbers) !== $count || $numbers !== range(1, $count)) {
-                $validator->errors()->add('installments', 'Installment schedule must match the number of installments.');
-            }
+            $this->validateInstallmentSchedule(
+                $validator,
+                $count,
+                $this->input('total_amount', $agreement?->total_amount),
+                $this->input('start_date', $agreement?->start_date?->format('Y-m-d')),
+                $this->input('end_date', $agreement?->end_date?->format('Y-m-d')),
+            );
         });
     }
 }

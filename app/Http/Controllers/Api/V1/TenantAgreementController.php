@@ -69,7 +69,7 @@ class TenantAgreementController extends Controller
                 'end_date' => $agreement->end_date?->toDateString(),
                 'status' => $agreement->status,
                 'total_amount' => $agreement->total_amount,
-            ]);
+            ], ['installments' => collect($installments)->map(fn (array $line) => collect($line)->only(['installment_no', 'due_date', 'amount', 'category', 'particulars'])->all())->all()]);
 
             return $agreement;
         });
@@ -130,10 +130,16 @@ class TenantAgreementController extends Controller
                 $schedules->create('tenant', $tenantAgreement->id, $branchContext->id(), $tenantAgreement->start_date->format('Y-m-d'), $tenantAgreement->payment_count, $tenantAgreement->total_amount, $tenantAgreement->payment_frequency ?: 'monthly', $tenantAgreement->payment_mode, $installments);
             }
             $tenantAgreement->increment('lock_version');
-            app(AuditService::class)->record('tenant_agreement.updated', $tenantAgreement, $before, $tenantAgreement->only(['agreement_no', 'tenant_customer_id', 'start_date', 'end_date', 'status', 'total_amount']));
+            app(AuditService::class)->record(
+                'tenant_agreement.updated',
+                $tenantAgreement,
+                $before,
+                $tenantAgreement->only(['agreement_no', 'tenant_customer_id', 'start_date', 'end_date', 'status', 'total_amount']),
+                $installments === null ? [] : ['installments' => collect($installments)->map(fn (array $line) => collect($line)->only(['installment_no', 'due_date', 'amount', 'category', 'particulars'])->all())->all()],
+            );
         });
 
-        return new TenantAgreementResource($tenantAgreement->refresh()->load(['tenant', 'properties']));
+        return new TenantAgreementResource($tenantAgreement->refresh()->load(['tenant', 'properties', 'installments.allocations.transaction']));
     }
 
     public function destroy(DeleteAgreementRequest $request, TenantAgreement $tenantAgreement, BranchContext $branchContext, AgreementLifecycleService $lifecycle): TenantAgreementResource

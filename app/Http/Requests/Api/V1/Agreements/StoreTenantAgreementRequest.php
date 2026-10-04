@@ -2,12 +2,15 @@
 
 namespace App\Http\Requests\Api\V1\Agreements;
 
+use App\Http\Requests\Api\V1\Agreements\Concerns\ValidatesAgreementInstallments;
 use App\Support\Branch\BranchContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class StoreTenantAgreementRequest extends FormRequest
 {
+    use ValidatesAgreementInstallments;
+
     public function authorize(): bool
     {
         return true;
@@ -32,6 +35,8 @@ class StoreTenantAgreementRequest extends FormRequest
             'payment_mode' => ['required', 'in:cash,cheque,bank_transfer'],
             'installments' => ['required', 'array'],
             'installments.*.installment_no' => ['required', 'integer', 'distinct', 'min:1'],
+            'installments.*.due_date' => ['sometimes', 'date_format:Y-m-d'],
+            'installments.*.amount' => ['sometimes', 'numeric', 'min:0.01', 'decimal:0,2'],
             'installments.*.category' => ['required', 'in:rent,security,commission'],
             'installments.*.particulars' => ['required', 'string', 'max:255'],
             'terms_text' => ['nullable', 'string'],
@@ -55,10 +60,7 @@ class StoreTenantAgreementRequest extends FormRequest
             if (count($this->input('installments', [])) !== (int) $this->input('payment_count')) {
                 $validator->errors()->add('installments', 'Installment schedule must match the number of installments.');
             }
-            $numbers = collect($this->input('installments', []))->pluck('installment_no')->sort()->values()->all();
-            if ($numbers !== range(1, (int) $this->input('payment_count'))) {
-                $validator->errors()->add('installments', 'Installment numbers must run from 1 to the payment count.');
-            }
+            $this->validateInstallmentSchedule($validator, (int) $this->input('payment_count'), $this->input('total_amount'), $this->input('start_date'), $this->input('end_date'));
         });
     }
 }
