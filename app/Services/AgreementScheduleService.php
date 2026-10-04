@@ -24,12 +24,12 @@ class AgreementScheduleService
                 'annually' => 12,
                 default => 1,
             };
-            $amount = $base + ($number === 1 ? $remainder : 0);
+            $amount = array_key_exists('amount', $line) ? $this->cents((string) $line['amount']) : $base + ($number === 1 ? $remainder : 0);
             DB::table($table)->insert([
                 'branch_id' => $branchId,
                 $foreignKey => $agreementId,
                 'installment_no' => $number,
-                'due_date' => $date->toDateString(),
+                'due_date' => $line['due_date'] ?? $date->toDateString(),
                 'amount' => number_format($amount / 100, 2, '.', ''),
                 'paid_amount' => 0,
                 'payment_mode' => $paymentMode,

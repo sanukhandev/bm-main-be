@@ -107,4 +107,69 @@ class AgreementBoundaryTest extends TestCase
         $this->branchRequest()->getJson('/api/v1/owner-agreements/'.$agreementId)
             ->assertNotFound()->assertJsonPath('code', 'RESOURCE_NOT_FOUND');
     }
+
+    public function test_custom_installment_dates_and_amounts_are_saved_for_owner_and_tenant(): void
+    {
+        $owner = $this->branchRequest()->postJson('/api/v1/owner-agreements', [
+            'owner_customer_id' => $this->customerA,
+            'property_ids' => [$this->propertyId],
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-12-31',
+            'total_amount' => '12000.00',
+            'payment_count' => 2,
+            'payment_mode' => 'bank_transfer',
+            'installments' => [
+                ['installment_no' => 1, 'due_date' => '2026-01-15', 'amount' => '5000.00', 'category' => 'rent', 'particulars' => 'January payment'],
+                ['installment_no' => 2, 'due_date' => '2026-07-15', 'amount' => '7000.00', 'category' => 'rent', 'particulars' => 'July payment'],
+            ],
+        ])->assertCreated()
+            ->assertJsonPath('data.installments.0.due_date', '2026-01-15')
+            ->assertJsonPath('data.installments.0.amount', '5000.00')
+            ->assertJsonPath('data.installments.1.due_date', '2026-07-15')
+            ->assertJsonPath('data.installments.1.amount', '7000.00')
+            ->json('data');
+
+        $this->branchRequest()->patchJson('/api/v1/owner-agreements/'.$owner['id'], [
+            'installments' => [
+                ['installment_no' => 1, 'due_date' => '2026-02-15', 'amount' => '4000.00', 'category' => 'rent', 'particulars' => 'February payment'],
+                ['installment_no' => 2, 'due_date' => '2026-08-15', 'amount' => '8000.00', 'category' => 'rent', 'particulars' => 'August payment'],
+            ],
+        ])->assertOk()
+            ->assertJsonPath('data.installments.0.due_date', '2026-02-15')
+            ->assertJsonPath('data.installments.0.amount', '4000.00')
+            ->assertJsonPath('data.installments.1.due_date', '2026-08-15')
+            ->assertJsonPath('data.installments.1.amount', '8000.00');
+
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
+            'tenant_customer_id' => $this->tenantId,
+            'properties' => [['property_id' => $this->propertyId, 'source_owner_agreement_id' => $owner['id']]],
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-12-31',
+            'total_amount' => '24000.00',
+            'payment_count' => 2,
+            'payment_mode' => 'cash',
+            'installments' => [
+                ['installment_no' => 1, 'due_date' => '2026-02-01', 'amount' => '10000.00', 'category' => 'rent', 'particulars' => 'February payment'],
+                ['installment_no' => 2, 'due_date' => '2026-08-01', 'amount' => '14000.00', 'category' => 'rent', 'particulars' => 'August payment'],
+            ],
+        ])->assertCreated()
+            ->assertJsonPath('data.installments.0.due_date', '2026-02-01')
+            ->assertJsonPath('data.installments.0.amount', '10000.00')
+            ->assertJsonPath('data.installments.1.due_date', '2026-08-01')
+            ->assertJsonPath('data.installments.1.amount', '14000.00');
+
+        $this->branchRequest()->postJson('/api/v1/owner-agreements', [
+            'owner_customer_id' => $this->customerA,
+            'property_ids' => [$this->propertyId],
+            'start_date' => '2026-01-01',
+            'end_date' => '2026-12-31',
+            'total_amount' => '12000.00',
+            'payment_count' => 2,
+            'payment_mode' => 'cash',
+            'installments' => [
+                ['installment_no' => 1, 'due_date' => '2026-01-15', 'amount' => '5000.00', 'category' => 'rent', 'particulars' => 'January payment'],
+                ['installment_no' => 2, 'due_date' => '2026-07-15', 'amount' => '6000.00', 'category' => 'rent', 'particulars' => 'July payment'],
+            ],
+        ])->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
+    }
 }
