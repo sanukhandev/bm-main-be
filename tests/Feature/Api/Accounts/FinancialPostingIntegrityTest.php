@@ -59,6 +59,24 @@ class FinancialPostingIntegrityTest extends TestCase
             ->assertJsonPath('data.installments.0.receipt.document_no', $posted->json('data.document_no'));
     }
 
+    public function test_defaulted_installment_can_be_paid_when_balance_remains(): void
+    {
+        $this->branchRequest()->patchJson('/api/v1/tenant-agreements/'.$this->tenantAgreementId.'/installments/'.$this->installmentId.'/status', [
+            'status' => 'defaulted',
+        ])->assertOk()->assertJsonPath('data.status', 'defaulted');
+
+        $posted = $this->branchRequest()->withHeader('Idempotency-Key', 'payment-after-default-001')->postJson('/api/v1/tenant-agreements/'.$this->tenantAgreementId.'/payments', [
+            'amount' => '10000.00', 'installment_id' => $this->installmentId, 'payment_mode' => 'cash', 'payment_date' => '2026-09-23',
+        ])->assertCreated();
+
+        $this->assertDatabaseHas('tenant_agreement_installments', [
+            'id' => $this->installmentId,
+            'paid_amount' => '10000.00',
+            'status' => 'paid',
+        ]);
+        $this->assertSame($posted->json('data.id'), DB::table('account_transaction_allocations')->where('tenant_agreement_installment_id', $this->installmentId)->value('account_transaction_id'));
+    }
+
     public function test_tenant_payment_line_forces_inward_receipt_and_keeps_manual_particulars(): void
     {
         $line = $this->branchRequest()->postJson('/api/v1/tenant-agreements/'.$this->tenantAgreementId.'/additional-payments', [
