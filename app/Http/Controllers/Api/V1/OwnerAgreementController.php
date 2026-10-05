@@ -54,6 +54,7 @@ class OwnerAgreementController extends Controller
             $schedules->create('owner', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode, $installments);
             app(AuditService::class)->record('owner_agreement.created', $agreement, null, [
                 'agreement_no' => $agreement->agreement_no,
+                'file_no' => $agreement->file_no,
                 'owner_customer_id' => $agreement->owner_customer_id,
                 'start_date' => $agreement->start_date?->toDateString(),
                 'end_date' => $agreement->end_date?->toDateString(),
@@ -86,7 +87,7 @@ class OwnerAgreementController extends Controller
             $this->ensurePropertiesBelongToOwner($branchContext->id(), $propertyIds, $data['owner_customer_id'] ?? $ownerAgreement->owner_customer_id);
         }
 
-        $before = $ownerAgreement->only(['agreement_no', 'owner_customer_id', 'start_date', 'end_date', 'status', 'total_amount']);
+        $before = $ownerAgreement->only(['agreement_no', 'file_no', 'owner_customer_id', 'start_date', 'end_date', 'status', 'total_amount']);
         DB::transaction(function () use ($data, $ownerAgreement, $branchContext, $before, $schedules) {
             $propertyIds = $data['property_ids'] ?? null;
             $installments = $data['installments'] ?? null;
@@ -108,7 +109,7 @@ class OwnerAgreementController extends Controller
                 'owner_agreement.updated',
                 $ownerAgreement,
                 $before,
-                $ownerAgreement->only(['agreement_no', 'owner_customer_id', 'start_date', 'end_date', 'status', 'total_amount']),
+                $ownerAgreement->only(['agreement_no', 'file_no', 'owner_customer_id', 'start_date', 'end_date', 'status', 'total_amount']),
                 $installments === null ? [] : ['installments' => collect($installments)->map(fn (array $line) => collect($line)->only(['installment_no', 'due_date', 'amount', 'category', 'particulars'])->all())->all()],
             );
         });
@@ -127,7 +128,7 @@ class OwnerAgreementController extends Controller
 
     private function applyFilters($query, array $filters, string $partyColumn): void
     {
-        $query->when($filters['search'] ?? null, fn ($query, $value) => $query->where('agreement_no', 'like', "%{$value}%"));
+        $query->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($search) => $search->where('agreement_no', 'like', "%{$value}%")->orWhere('file_no', 'like', "%{$value}%")));
         $query->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value));
         $query->when($filters['party_customer_id'] ?? null, fn ($query, $value) => $query->where($partyColumn, $value));
         $sort = $filters['sort'] ?? '-created_at';

@@ -13,8 +13,6 @@ use Illuminate\Support\Facades\DB;
 
 class ReportsService
 {
-    private const TERMINAL_AGREEMENT_STATUSES = ['cancelled', 'terminated'];
-
     public function ownerAgreements(Request $request, BranchContext $context, bool $financial): array
     {
         $query = OwnerAgreement::query()->with(['owner', 'properties'])->where('branch_id', $context->id());
@@ -160,11 +158,19 @@ class ReportsService
         $table = $type === 'owner' ? 'owner_agreement_installments' : 'tenant_agreement_installments';
         $foreign = $type === 'owner' ? 'owner_agreement_id' : 'tenant_agreement_id';
         $ids = (clone $query)->select('id');
-        $total = (clone $query)->sum('total_amount');
-        $paid = DB::table($table)->whereIn($foreign, $ids)->sum('paid_amount');
+        $total = $financial ? (clone $query)->sum('total_amount') : null;
+        $paid = $financial ? DB::table($table)->whereIn($foreign, $ids)->sum('paid_amount') : null;
         $page = $query->paginate($this->perPage($request));
-        $page->setCollection($page->getCollection()->map(function ($agreement) use ($model, $financial, $table, $foreign, $type) {
-            $paid = DB::table($table)->where($foreign, $agreement->id)->sum('paid_amount');
+        $paidByAgreement = $financial
+            ? DB::table($table)
+                ->whereIn($foreign, $page->getCollection()->pluck('id'))
+                ->select($foreign)
+                ->selectRaw('COALESCE(SUM(paid_amount), 0) as paid_amount')
+                ->groupBy($foreign)
+                ->pluck('paid_amount', $foreign)
+            : collect();
+        $page->setCollection($page->getCollection()->map(function ($agreement) use ($model, $financial, $paidByAgreement, $type) {
+            $paid = (float) ($paidByAgreement[$agreement->id] ?? 0);
 
             return ['agreement_type' => $type, 'agreement_id' => $agreement->id, 'agreement_no' => $agreement->agreement_no, $model.'_id' => $agreement->{$model.'_customer_id'}, $model.'_name' => $agreement->{$model}?->display_name, 'properties' => $agreement->properties->map(fn ($p) => ['id' => $p->id, 'code' => $p->property_code, 'name' => $p->name])->values(), 'start_date' => $agreement->start_date?->format('Y-m-d'), 'end_date' => $agreement->end_date?->format('Y-m-d'), 'status' => $agreement->status, 'agreement_amount' => $financial ? $agreement->total_amount : null, 'paid_amount' => $financial ? number_format((float) $paid, 2, '.', '') : null, 'outstanding_amount' => $financial ? number_format((float) $agreement->total_amount - (float) $paid, 2, '.', '') : null, 'payment_count' => $agreement->payment_count, 'created_at' => $agreement->created_at?->toIso8601String()];
         }));

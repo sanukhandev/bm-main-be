@@ -22,6 +22,7 @@ class PropertyBoundaryTest extends TestCase
             ['labor_camp'],
             ['warehouse'],
             ['land'],
+            ['garage'],
         ];
     }
 
@@ -186,23 +187,39 @@ class PropertyBoundaryTest extends TestCase
             'owner_customer_id' => $this->customerA,
             'property_type' => 'apartment',
             'name' => 'Utility Property',
-            'electricity_provider' => 'dewa',
-            'electricity_account_number' => 'DEWA-123',
-            'cooling_provider' => 'empower',
-            'cooling_account_number' => 'EMP-456',
-            'gas_provider' => 'emirates_gas',
-            'gas_connection_type' => 'piped_gas',
-            'gas_connection_number' => 'GAS-789',
+            'utility_details' => [
+                ['type' => 'electricity', 'provider' => 'dewa', 'account_number' => 'DEWA-123'],
+                ['type' => 'cooling', 'provider' => 'empower', 'account_number' => 'EMP-456'],
+                ['type' => 'gas', 'provider' => 'emirates_gas', 'connection_type' => 'piped_gas', 'connection_number' => 'GAS-789'],
+                ['type' => 'furniture', 'details' => 'Sofa, dining table, curtains'],
+            ],
         ])->assertCreated()->json('data');
 
         $this->assertSame('dewa', $property['electricity_provider']);
         $this->assertSame('empower', $property['cooling_provider']);
         $this->assertSame('GAS-789', $property['gas_connection_number']);
+        $this->assertSame('furniture', $property['utility_details'][3]['type']);
+        $this->assertSame('Sofa, dining table, curtains', $property['utility_details'][3]['details']);
         $this->assertDatabaseHas('properties', [
             'id' => $property['id'],
             'electricity_account_number' => 'DEWA-123',
             'cooling_account_number' => 'EMP-456',
             'gas_connection_type' => 'piped_gas',
         ]);
+    }
+
+    public function test_legacy_scalar_utility_payload_is_exposed_as_an_array(): void
+    {
+        $property = $this->branchRequest()->postJson('/api/v1/properties', [
+            'owner_customer_id' => $this->customerA,
+            'property_type' => 'apartment',
+            'name' => 'Legacy Utility Property',
+            'electricity_provider' => 'dewa',
+            'electricity_account_number' => 'DEWA-LEGACY',
+        ])->assertCreated()->json('data');
+
+        $this->assertSame([
+            ['type' => 'electricity', 'provider' => 'dewa', 'account_number' => 'DEWA-LEGACY'],
+        ], $property['utility_details']);
     }
 }

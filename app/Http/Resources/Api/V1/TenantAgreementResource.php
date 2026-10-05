@@ -14,6 +14,7 @@ class TenantAgreementResource extends JsonResource
             'id' => $this->id,
             'branch_id' => $this->branch_id,
             'agreement_no' => $this->agreement_no,
+            'file_no' => $this->file_no,
             'tenant_customer_id' => $this->tenant_customer_id,
             'tenant' => new CustomerResource($this->whenLoaded('tenant')),
             'properties' => $this->whenLoaded('properties', fn () => $this->properties->map(fn ($property) => [

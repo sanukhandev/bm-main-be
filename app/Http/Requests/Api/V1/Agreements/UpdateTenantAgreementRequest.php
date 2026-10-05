@@ -23,6 +23,7 @@ class UpdateTenantAgreementRequest extends FormRequest
 
         return [
             'agreement_no' => ['sometimes', 'required', 'string', 'max:64', Rule::unique('tenant_agreements', 'agreement_no')->where(fn ($query) => $query->where('branch_id', $branchId))->ignore($agreementId)],
+            'file_no' => ['sometimes', 'nullable', 'string', 'max:100'],
             'tenant_customer_id' => ['sometimes', 'required', 'integer', Rule::exists('customers', 'id')->where(fn ($query) => $query->where('branch_id', $branchId)->where('status', 'active'))],
             'properties' => ['sometimes', 'array', 'min:1'],
             'properties.*.property_id' => ['required', 'integer', 'distinct', Rule::exists('properties', 'id')->where(fn ($query) => $query->where('branch_id', $branchId)->where('status', 'active'))],

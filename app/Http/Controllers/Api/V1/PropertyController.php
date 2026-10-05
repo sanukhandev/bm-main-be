@@ -73,11 +73,12 @@ class PropertyController extends Controller
     {
         Gate::authorize('create', Property::class);
         $data = $request->validated();
+        $data = $this->applyUtilityDetails($data);
         $this->ensureOwnerRole($branchContext->id(), $data['owner_customer_id']);
         $data['property_code'] ??= $this->propertyCode($branchContext->branch(), $data);
         $property = new Property($data);
         $property->forceFill(['branch_id' => $branchContext->id(), 'status' => 'active'])->save();
-        app(AuditService::class)->record('property.created', $property, null, $property->only(['owner_customer_id', 'property_code', 'unit_number', 'property_type', 'name', 'building_name', 'state_or_emirate', 'area', 'electricity_provider', 'electricity_account_number', 'cooling_provider', 'cooling_account_number', 'gas_provider', 'gas_connection_type', 'gas_connection_number', 'status']), [], $branchContext->id());
+        app(AuditService::class)->record('property.created', $property, null, $property->only($this->auditFields()), [], $branchContext->id());
 
         return new PropertyResource($property->load('owner'));
     }
@@ -87,7 +88,7 @@ class PropertyController extends Controller
         $type = $data['property_type'] instanceof PropertyType ? $data['property_type']->value : (string) $data['property_type'];
         $typeCode = [
             'apartment' => 'APT', 'villa' => 'VIL', 'shop' => 'SHP', 'office' => 'OFF',
-            'space' => 'SPC', 'labor_camp' => 'LC', 'warehouse' => 'WH', 'land' => 'LND',
+            'space' => 'SPC', 'labor_camp' => 'LC', 'warehouse' => 'WH', 'land' => 'LND', 'garage' => 'GAR',
         ][$type] ?? strtoupper(substr($type, 0, 3));
         $emirate = strtoupper(trim((string) ($data['state_or_emirate'] ?? '')));
         $emirateCode = [
@@ -124,9 +125,10 @@ class PropertyController extends Controller
     {
         Gate::authorize('update', $property);
         $data = $request->validated();
-        $before = $property->only(['owner_customer_id', 'property_code', 'unit_number', 'property_type', 'name', 'building_name', 'state_or_emirate', 'area', 'electricity_provider', 'electricity_account_number', 'cooling_provider', 'cooling_account_number', 'gas_provider', 'gas_connection_type', 'gas_connection_number', 'status']);
+        $data = $this->applyUtilityDetails($data, $property);
+        $before = $property->only($this->auditFields());
         $property->update($data);
-        app(AuditService::class)->record('property.updated', $property, $before, $property->only(['owner_customer_id', 'property_code', 'unit_number', 'property_type', 'name', 'building_name', 'state_or_emirate', 'area', 'electricity_provider', 'electricity_account_number', 'cooling_provider', 'cooling_account_number', 'gas_provider', 'gas_connection_type', 'gas_connection_number', 'status']), [], $property->branch_id);
+        app(AuditService::class)->record('property.updated', $property, $before, $property->only($this->auditFields()), [], $property->branch_id);
 
         return new PropertyResource($property->refresh()->load('owner'));
     }
@@ -145,5 +147,87 @@ class PropertyController extends Controller
         if (! CustomerRoleAssignment::query()->where('branch_id', $branchId)->where('customer_id', $customerId)->where('role', 'owner')->exists()) {
             throw new ApiException('OWNER_ROLE_REQUIRED', 'The selected customer is not an owner.', 422);
         }
+    }
+
+    private function auditFields(): array
+    {
+        return ['owner_customer_id', 'property_code', 'unit_number', 'property_type', 'name', 'building_name', 'state_or_emirate', 'area', 'electricity_provider', 'electricity_account_number', 'cooling_provider', 'cooling_account_number', 'gas_provider', 'gas_connection_type', 'gas_connection_number', 'utility_details_json', 'status'];
+    }
+
+    private function applyUtilityDetails(array $data, ?Property $property = null): array
+    {
+        $legacyFields = ['electricity_provider', 'electricity_account_number', 'cooling_provider', 'cooling_account_number', 'gas_provider', 'gas_connection_type', 'gas_connection_number'];
+
+        if (array_key_exists('utility_details', $data)) {
+            $utilities = $this->normalizeUtilityDetails($data['utility_details'] ?? []);
+        } elseif (array_intersect(array_keys($data), $legacyFields) !== []) {
+            $utilities = $this->legacyUtilities($data, $property);
+        } else {
+            return $data;
+        }
+
+        $data['utility_details_json'] = $utilities === [] ? null : $utilities;
+        $byType = collect($utilities)->keyBy('type');
+        $electricity = $byType->get('electricity', []);
+        $cooling = $byType->get('cooling', []);
+        $gas = $byType->get('gas', []);
+        $data['electricity_provider'] = $electricity['provider'] ?? null;
+        $data['electricity_account_number'] = $electricity['account_number'] ?? null;
+        $data['cooling_provider'] = $cooling['provider'] ?? null;
+        $data['cooling_account_number'] = $cooling['account_number'] ?? null;
+        $data['gas_provider'] = $gas['provider'] ?? null;
+        $data['gas_connection_type'] = $gas['connection_type'] ?? null;
+        $data['gas_connection_number'] = $gas['connection_number'] ?? null;
+        unset($data['utility_details']);
+
+        return $data;
+    }
+
+    private function legacyUtilities(array $data, ?Property $property): array
+    {
+        $current = $property?->utilityDetails() ?? [];
+        $currentByType = collect($current)->keyBy('type');
+        $values = [
+            'electricity' => [
+                'provider' => $data['electricity_provider'] ?? $property?->electricity_provider,
+                'account_number' => $data['electricity_account_number'] ?? $property?->electricity_account_number,
+            ],
+            'cooling' => [
+                'provider' => $data['cooling_provider'] ?? $property?->cooling_provider,
+                'account_number' => $data['cooling_account_number'] ?? $property?->cooling_account_number,
+            ],
+            'gas' => [
+                'provider' => $data['gas_provider'] ?? $property?->gas_provider,
+                'connection_type' => $data['gas_connection_type'] ?? $property?->gas_connection_type,
+                'connection_number' => $data['gas_connection_number'] ?? $property?->gas_connection_number,
+            ],
+        ];
+
+        $utilities = collect($values)->map(function (array $details, string $type) use ($currentByType): array {
+            $details = array_filter($details, static fn ($value): bool => $value !== null && $value !== '');
+            if ($details === [] && $currentByType->has($type)) {
+                return $currentByType->get($type);
+            }
+
+            return ['type' => $type] + $details;
+        })->filter(fn (array $details): bool => count($details) > 1)->values()->all();
+
+        return array_merge($utilities, $currentByType->filter(fn (array $utility): bool => $utility['type'] === 'furniture')->values()->all());
+    }
+
+    private function normalizeUtilityDetails(array $utilities): array
+    {
+        return collect($utilities)->map(function (array $utility): array {
+            $normalized = ['type' => $utility['type']];
+            foreach (['provider', 'account_number', 'connection_type', 'connection_number', 'details'] as $field) {
+                if (isset($utility[$field]) && trim((string) $utility[$field]) !== '') {
+                    $normalized[$field] = trim((string) $utility[$field]);
+                }
+            }
+
+            return $normalized;
+        })->filter(function (array $utility): bool {
+            return $utility['type'] === 'furniture' ? isset($utility['details']) : count($utility) > 1;
+        })->values()->all();
     }
 }

@@ -27,7 +27,7 @@ class CustomerController extends Controller
     {
         Gate::authorize('create', Customer::class);
 
-        $result = $extractor->extract($request->file('document'), $request->validated('role'));
+        $result = $extractor->extract($request->file('document'), $request->validated('role'), $request->validated('customer_type', 'individual'));
         $result['verification_token'] = $verification->issue($result['fields']['identity_no'] ?? null, $request->user(), app(BranchContext::class)->id());
 
         return ['data' => $result];

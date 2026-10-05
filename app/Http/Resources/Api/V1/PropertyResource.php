@@ -32,6 +32,7 @@ class PropertyResource extends JsonResource
             'gas_provider' => $this->gas_provider,
             'gas_connection_type' => $this->gas_connection_type,
             'gas_connection_number' => $this->gas_connection_number,
+            'utility_details' => $this->utilityDetails(),
             'status' => $this->status,
             'notes' => $this->notes,
             'metadata_json' => $this->metadata_json,

@@ -38,6 +38,7 @@ class AgreementBoundaryTest extends TestCase
     {
         $owner = $this->branchRequest()->postJson('/api/v1/owner-agreements', [
             'agreement_no' => 'OA-001',
+            'file_no' => 'OWNER-FILE-001',
             'owner_customer_id' => $this->customerA,
             'property_ids' => [$this->propertyId],
             'start_date' => '2026-01-01',
@@ -48,6 +49,9 @@ class AgreementBoundaryTest extends TestCase
             'installments' => $this->agreementInstallments(12),
         ])->assertCreated()->json('data');
         $this->assertSame('AED', $owner['currency_code']);
+        $this->assertSame('OWNER-FILE-001', $owner['file_no']);
+        $this->branchRequest()->getJson('/api/v1/owner-agreements?search=OWNER-FILE-001')
+            ->assertOk()->assertJsonPath('data.0.id', $owner['id']);
 
         $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
             'agreement_no' => 'TA-BAD',
@@ -67,6 +71,7 @@ class AgreementBoundaryTest extends TestCase
 
         $tenant = $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
             'agreement_no' => 'TA-001',
+            'file_no' => 'TENANT-FILE-001',
             'tenant_customer_id' => $this->tenantId,
             'properties' => [[
                 'property_id' => $this->propertyId,
@@ -80,6 +85,9 @@ class AgreementBoundaryTest extends TestCase
             'installments' => $this->agreementInstallments(12),
         ])->assertCreated()->json('data');
         $this->assertSame('AED', $tenant['currency_code']);
+        $this->assertSame('TENANT-FILE-001', $tenant['file_no']);
+        $this->branchRequest()->getJson('/api/v1/tenant-agreements?search=TENANT-FILE-001')
+            ->assertOk()->assertJsonPath('data.0.id', $tenant['id']);
 
         $this->branchRequest()->deleteJson('/api/v1/tenant-agreements/'.$tenant['id'], ['reason' => 'Closed'])
             ->assertOk()->assertJsonPath('data.status', 'cancelled');
