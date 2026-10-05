@@ -16,22 +16,31 @@ class PropertyProfileService
 
     public function build(Property $property, bool $includeFinancials): array
     {
+        $agreementRelations = ['owner'];
+        $tenantAgreementRelations = ['tenant'];
+        $workOrderRelations = ['vendor'];
+        if ($includeFinancials) {
+            $agreementRelations = array_merge($agreementRelations, ['installments.allocations.transaction', 'additionalPayments.accountTransaction']);
+            $tenantAgreementRelations = array_merge($tenantAgreementRelations, ['installments.allocations.transaction', 'additionalPayments.accountTransaction']);
+            $workOrderRelations[] = 'payments.accountTransaction';
+        }
+
         $ownerAgreements = OwnerAgreement::query()
             ->where('branch_id', $property->branch_id)
             ->whereHas('properties', fn ($query) => $query->where('properties.id', $property->id))
-            ->with(['owner', 'installments.allocations.transaction', 'additionalPayments.accountTransaction'])
+            ->with($agreementRelations)
             ->latest('id')->get();
 
         $tenantAgreements = TenantAgreement::query()
             ->where('branch_id', $property->branch_id)
             ->whereHas('properties', fn ($query) => $query->where('properties.id', $property->id))
-            ->with(['tenant', 'installments.allocations.transaction', 'additionalPayments.accountTransaction'])
+            ->with($tenantAgreementRelations)
             ->latest('id')->get();
 
         $workOrders = WorkOrder::query()
             ->forBranch($property->branch_id)
             ->where('property_id', $property->id)
-            ->with(['vendor', 'payments.accountTransaction'])
+            ->with($workOrderRelations)
             ->latest('id')->get();
 
         $activeOwners = $ownerAgreements->whereIn('status', self::ACTIVE_OWNER_STATUSES);

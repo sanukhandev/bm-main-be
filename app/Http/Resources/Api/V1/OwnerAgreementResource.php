@@ -14,6 +14,7 @@ class OwnerAgreementResource extends JsonResource
             'id' => $this->id,
             'branch_id' => $this->branch_id,
             'agreement_no' => $this->agreement_no,
+            'file_no' => $this->file_no,
             'owner_customer_id' => $this->owner_customer_id,
             'owner' => new CustomerResource($this->whenLoaded('owner')),
             'properties' => PropertyResource::collection($this->whenLoaded('properties')),

@@ -36,9 +36,6 @@ class AgreementLifecycleService
             if ($type === 'tenant' && in_array($to, [AgreementStatus::Approved->value, AgreementStatus::Commenced->value], true)) {
                 $this->assertComplete($type, $agreement, $branchId);
             }
-            if ($to === AgreementStatus::Commenced->value && $this->today($branchId)->lt($this->agreementDate($agreement->start_date, $branchId))) {
-                throw new ApiException('AGREEMENT_CANNOT_COMMENCE', 'An agreement cannot commence before its start date.', 409);
-            }
             if ($to === AgreementStatus::Commenced->value && $this->today($branchId)->gt($this->agreementDate($agreement->end_date, $branchId))) {
                 throw new ApiException('AGREEMENT_CANNOT_COMMENCE', 'An agreement cannot commence after its end date.', 409);
             }
@@ -117,7 +114,7 @@ class AgreementLifecycleService
                 throw new ApiException('AGREEMENT_CANNOT_RENEW', 'A renewal must start after the original agreement period.', 422);
             }
 
-            $attributes = $source->only(['owner_customer_id', 'tenant_customer_id', 'total_amount', 'currency_code', 'payment_count', 'payment_frequency', 'payment_mode', 'terms_text', 'notes']);
+            $attributes = $source->only(['owner_customer_id', 'tenant_customer_id', 'file_no', 'total_amount', 'currency_code', 'payment_count', 'payment_frequency', 'payment_mode', 'terms_text', 'notes']);
             $attributes['start_date'] = $start->toDateString();
             $attributes['end_date'] = $end->toDateString();
             $attributes['agreement_no'] = $numbers->next($branch, $type === 'owner' ? 'OWNER_AGREEMENT' : 'TENANT_AGREEMENT', (int) $start->format('Y'));
@@ -141,7 +138,7 @@ class AgreementLifecycleService
             $this->history($type, $source, $source->status, $source->status, 'renew', 'Renewed as agreement '.$new->agreement_no, $userId, ['renewed_agreement_id' => $new->id]);
             $this->history($type, $new, null, AgreementStatus::Draft->value, 'renew', null, $userId, ['renewed_from_agreement_id' => $source->id]);
             app(AuditService::class)->record($type.'_agreement.renewed', $source, null, null, ['source_agreement_id' => $source->id, 'new_agreement_id' => $new->id, 'new_agreement_number' => $new->agreement_no], $branchId, $userId);
-            app(AuditService::class)->record($type.'_agreement.created', $new, null, ['status' => $new->status, 'agreement_no' => $new->agreement_no], ['renewed_from_agreement_id' => $source->id], $branchId, $userId);
+            app(AuditService::class)->record($type.'_agreement.created', $new, null, ['status' => $new->status, 'agreement_no' => $new->agreement_no, 'file_no' => $new->file_no], ['renewed_from_agreement_id' => $source->id], $branchId, $userId);
 
             return $new;
         });
@@ -152,7 +149,7 @@ class AgreementLifecycleService
         return match ($agreement->status) {
             'draft' => ['submit', 'cancel'],
             'pending_approval' => ['approve', 'cancel'],
-            'approved' => $this->today($branchId)->gte($this->agreementDate($agreement->start_date, $branchId)) ? ['commence', 'cancel'] : ['cancel'],
+            'approved' => ['commence', 'cancel'],
             'commenced' => ['hold', 'terminate', 'extend'],
             'on_hold' => ['resume', 'terminate', 'extend'],
             'expired' => ['extend', 'renew'],

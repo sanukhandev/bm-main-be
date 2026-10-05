@@ -23,6 +23,7 @@ class UpdateOwnerAgreementRequest extends FormRequest
 
         return [
             'agreement_no' => ['sometimes', 'required', 'string', 'max:64', Rule::unique('owner_agreements', 'agreement_no')->where(fn ($query) => $query->where('branch_id', $branchId))->ignore($agreementId)],
+            'file_no' => ['sometimes', 'nullable', 'string', 'max:100'],
             'owner_customer_id' => ['sometimes', 'required', 'integer', Rule::exists('customers', 'id')->where(fn ($query) => $query->where('branch_id', $branchId)->where('status', 'active'))],
             'property_ids' => ['sometimes', 'array', 'min:1'],
             'property_ids.*' => ['integer', 'distinct', Rule::exists('properties', 'id')->where(fn ($query) => $query->where('branch_id', $branchId)->where('status', 'active'))],

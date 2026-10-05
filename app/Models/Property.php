@@ -34,6 +34,7 @@ class Property extends Model
         'gas_provider',
         'gas_connection_type',
         'gas_connection_number',
+        'utility_details_json',
         'notes',
         'metadata_json',
     ];
@@ -44,7 +45,39 @@ class Property extends Model
             'property_type' => PropertyType::class,
             'area' => 'decimal:4',
             'metadata_json' => 'array',
+            'utility_details_json' => 'array',
         ];
+    }
+
+    public function utilityDetails(): array
+    {
+        if (is_array($this->utility_details_json) && $this->utility_details_json !== []) {
+            return $this->utility_details_json;
+        }
+
+        $legacy = [
+            'electricity' => [
+                'provider' => $this->electricity_provider,
+                'account_number' => $this->electricity_account_number,
+            ],
+            'cooling' => [
+                'provider' => $this->cooling_provider,
+                'account_number' => $this->cooling_account_number,
+            ],
+            'gas' => [
+                'provider' => $this->gas_provider,
+                'connection_type' => $this->gas_connection_type,
+                'connection_number' => $this->gas_connection_number,
+            ],
+        ];
+
+        return collect($legacy)
+            ->map(function (array $details, string $type): array {
+                return ['type' => $type] + array_filter($details, static fn ($value): bool => $value !== null && $value !== '');
+            })
+            ->filter(fn (array $details): bool => count($details) > 1)
+            ->values()
+            ->all();
     }
 
     public function branch(): BelongsTo

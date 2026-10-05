@@ -25,13 +25,13 @@ class IdentityVerificationService
     public function assertValid(?string $token, ?string $identityNo, User $user, int $branchId): void
     {
         if (! $token || ! $identityNo) {
-            throw ValidationException::withMessages(['identity_no' => 'A verified Emirates ID scan is required for this verification.']);
+            throw ValidationException::withMessages(['identity_no' => 'A verified identity document scan is required for this verification.']);
         }
 
         try {
             $payload = json_decode(Crypt::decryptString($token), true, flags: JSON_THROW_ON_ERROR);
         } catch (\Throwable) {
-            throw ValidationException::withMessages(['identity_no' => 'The identity verification has expired. Scan the document again.']);
+            throw ValidationException::withMessages(['identity_no' => 'The document verification has expired. Scan the document again.']);
         }
 
         $valid = ($payload['user_id'] ?? null) === $user->id
@@ -40,7 +40,7 @@ class IdentityVerificationService
             && hash_equals((string) ($payload['identity_hash'] ?? ''), hash('sha256', $this->normalize($identityNo)));
 
         if (! $valid) {
-            throw ValidationException::withMessages(['identity_no' => 'The Emirates ID value does not match the verified scan.']);
+            throw ValidationException::withMessages(['identity_no' => 'The identity value does not match the verified scan.']);
         }
     }
 

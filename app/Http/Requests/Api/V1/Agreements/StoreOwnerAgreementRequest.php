@@ -22,6 +22,7 @@ class StoreOwnerAgreementRequest extends FormRequest
 
         return [
             'agreement_no' => ['sometimes', 'nullable', 'string', 'max:64', Rule::unique('owner_agreements', 'agreement_no')->where(fn ($query) => $query->where('branch_id', $branchId))],
+            'file_no' => ['sometimes', 'nullable', 'string', 'max:100'],
             'owner_customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where(fn ($query) => $query->where('branch_id', $branchId)->where('status', 'active'))],
             'property_ids' => ['required', 'array', 'min:1'],
             'property_ids.*' => ['integer', 'distinct', Rule::exists('properties', 'id')->where(fn ($query) => $query->where('branch_id', $branchId)->where('status', 'active'))],

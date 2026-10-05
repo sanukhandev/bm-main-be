@@ -12,4 +12,5 @@ enum PropertyType: string
     case LaborCamp = 'labor_camp';
     case Warehouse = 'warehouse';
     case Land = 'land';
+    case Garage = 'garage';
 }

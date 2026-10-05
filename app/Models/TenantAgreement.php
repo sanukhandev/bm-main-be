@@ -17,6 +17,7 @@ class TenantAgreement extends Model
 
     protected $fillable = [
         'agreement_no',
+        'file_no',
         'tenant_customer_id',
         'start_date',
         'end_date',

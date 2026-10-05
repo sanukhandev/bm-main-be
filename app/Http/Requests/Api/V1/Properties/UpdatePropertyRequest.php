@@ -38,6 +38,13 @@ class UpdatePropertyRequest extends FormRequest
             'gas_provider' => ['sometimes', 'nullable', 'string', Rule::in(['emirates_gas', 'enoc', 'adnoc', 'lootah_gas', 'dubai_gas', 'other'])],
             'gas_connection_type' => ['sometimes', 'nullable', 'string', Rule::in(['piped_gas', 'lpg_cylinder', 'bulk_lpg', 'other'])],
             'gas_connection_number' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'utility_details' => ['sometimes', 'nullable', 'array'],
+            'utility_details.*.type' => ['required', 'string', Rule::in(['electricity', 'cooling', 'gas', 'furniture']), 'distinct'],
+            'utility_details.*.provider' => ['nullable', 'string', 'max:40'],
+            'utility_details.*.account_number' => ['nullable', 'string', 'max:100'],
+            'utility_details.*.connection_type' => ['nullable', 'string', Rule::in(['piped_gas', 'lpg_cylinder', 'bulk_lpg', 'other'])],
+            'utility_details.*.connection_number' => ['nullable', 'string', 'max:100'],
+            'utility_details.*.details' => ['nullable', 'string', 'max:2000'],
             'notes' => ['sometimes', 'nullable', 'string'],
             'metadata_json' => ['sometimes', 'nullable', 'array'],
         ];
@@ -48,5 +55,34 @@ class UpdatePropertyRequest extends FormRequest
         if ($this->has('country_code')) {
             $this->merge(['country_code' => $this->country_code ? strtoupper($this->country_code) : null]);
         }
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            $providers = [
+                'electricity' => ['dewa', 'addc', 'aadc', 'sewa', 'etihadwe', 'other'],
+                'cooling' => ['empower', 'emicool', 'tabreed', 'nakheel', 'other'],
+                'gas' => ['emirates_gas', 'enoc', 'adnoc', 'lootah_gas', 'dubai_gas', 'other'],
+            ];
+            $utilities = $this->input('utility_details', []);
+            if (! is_array($utilities)) {
+                return;
+            }
+
+            foreach ($utilities as $index => $utility) {
+                if (! is_array($utility)) {
+                    continue;
+                }
+                $type = $utility['type'] ?? null;
+                $provider = $utility['provider'] ?? null;
+                if ($provider !== null && $provider !== '' && isset($providers[$type]) && ! in_array($provider, $providers[$type], true)) {
+                    $validator->errors()->add("utility_details.{$index}.provider", 'The selected provider is not valid for this utility type.');
+                }
+                if ($type === 'furniture' && trim((string) ($utility['details'] ?? '')) === '') {
+                    $validator->errors()->add("utility_details.{$index}.details", 'Please describe the included furniture.');
+                }
+            }
+        });
     }
 }

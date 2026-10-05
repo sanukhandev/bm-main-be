@@ -64,6 +64,7 @@ class TenantAgreementController extends Controller
             $schedules->create('tenant', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode, $installments);
             app(AuditService::class)->record('tenant_agreement.created', $agreement, null, [
                 'agreement_no' => $agreement->agreement_no,
+                'file_no' => $agreement->file_no,
                 'tenant_customer_id' => $agreement->tenant_customer_id,
                 'start_date' => $agreement->start_date?->toDateString(),
                 'end_date' => $agreement->end_date?->toDateString(),
@@ -91,7 +92,7 @@ class TenantAgreementController extends Controller
         if (isset($data['tenant_customer_id'])) {
             $this->ensureTenantRole($branchContext->id(), $data['tenant_customer_id']);
         }
-        $before = $tenantAgreement->only(['agreement_no', 'tenant_customer_id', 'start_date', 'end_date', 'status', 'total_amount']);
+        $before = $tenantAgreement->only(['agreement_no', 'file_no', 'tenant_customer_id', 'start_date', 'end_date', 'status', 'total_amount']);
         DB::transaction(function () use ($data, $tenantAgreement, $branchContext, $availability, $before, $schedules) {
             $properties = $data['properties'] ?? null;
             $installments = $data['installments'] ?? null;
@@ -134,7 +135,7 @@ class TenantAgreementController extends Controller
                 'tenant_agreement.updated',
                 $tenantAgreement,
                 $before,
-                $tenantAgreement->only(['agreement_no', 'tenant_customer_id', 'start_date', 'end_date', 'status', 'total_amount']),
+                $tenantAgreement->only(['agreement_no', 'file_no', 'tenant_customer_id', 'start_date', 'end_date', 'status', 'total_amount']),
                 $installments === null ? [] : ['installments' => collect($installments)->map(fn (array $line) => collect($line)->only(['installment_no', 'due_date', 'amount', 'category', 'particulars'])->all())->all()],
             );
         });
@@ -153,7 +154,7 @@ class TenantAgreementController extends Controller
 
     private function applyFilters($query, array $filters): void
     {
-        $query->when($filters['search'] ?? null, fn ($query, $value) => $query->where('agreement_no', 'like', "%{$value}%"));
+        $query->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($search) => $search->where('agreement_no', 'like', "%{$value}%")->orWhere('file_no', 'like', "%{$value}%")));
         $query->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value));
         $query->when($filters['party_customer_id'] ?? null, fn ($query, $value) => $query->where('tenant_customer_id', $value));
         $sort = $filters['sort'] ?? '-created_at';

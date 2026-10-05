@@ -76,6 +76,26 @@ class AgreementLifecycleTest extends TestCase
         $this->action('owner', $owner['id'], 'commence')->assertOk()->assertJsonPath('data.status', 'commenced');
     }
 
+    public function test_owner_agreement_can_commence_before_its_start_date(): void
+    {
+        $startDate = now('Asia/Dubai')->addMonth()->toDateString();
+        $owner = $this->branchRequest()->postJson('/api/v1/owner-agreements', [
+            'owner_customer_id' => $this->customerA,
+            'property_ids' => [$this->propertyId],
+            'start_date' => $startDate,
+            'end_date' => now('Asia/Dubai')->addYear()->toDateString(),
+            'total_amount' => '12000.00',
+            'currency_code' => 'AED',
+            'payment_count' => 12,
+            'payment_mode' => 'cash',
+            'installments' => $this->agreementInstallments(12),
+        ])->assertCreated()->json('data');
+
+        $this->action('owner', $owner['id'], 'submit')->assertOk();
+        $this->action('owner', $owner['id'], 'approve')->assertOk()->assertJsonPath('data.available_actions.0', 'commence');
+        $this->action('owner', $owner['id'], 'commence')->assertOk()->assertJsonPath('data.status', 'commenced');
+    }
+
     public function test_arbitrary_approval_and_locked_edits_are_rejected(): void
     {
         $owner = $this->createOwner();
