@@ -34,7 +34,7 @@ class PostAgreementPayment
 
             $installmentTable = $type === 'owner' ? 'owner_agreement_installments' : 'tenant_agreement_installments';
             $installmentKey = $type === 'owner' ? 'owner_agreement_id' : 'tenant_agreement_id';
-            $installments = DB::table($installmentTable)->where('branch_id', $branch->id)->where($installmentKey, $agreementId)->whereIn('status', ['pending', 'partially_paid'])
+            $installments = DB::table($installmentTable)->where('branch_id', $branch->id)->where($installmentKey, $agreementId)->whereIn('status', ['pending', 'partially_paid', 'defaulted'])
                 ->when($data['installment_id'] ?? null, fn ($query, $installmentId) => $query->where('id', $installmentId))
                 ->orderBy('installment_no')->lockForUpdate()->get();
             if ($installments->isEmpty() && ! empty($data['installment_id'])) {
