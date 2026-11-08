@@ -133,6 +133,22 @@ class TenantPropertyAvailabilityTest extends TestCase
             ->assertUnprocessable()->assertJsonPath('code', 'OWNER_AGREEMENT_DATE_COVERAGE_REQUIRED');
     }
 
+    public function test_coverage_override_requires_a_reason(): void
+    {
+        $this->assertDatabaseHas('permissions', ['key' => 'agreements.override_coverage']);
+
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
+            'tenant_customer_id' => $this->tenantId,
+            'properties' => [['property_id' => $this->propertyA, 'source_owner_agreement_id' => $this->ownerAgreementId]],
+            'start_date' => '2026-01-01', 'end_date' => '2027-12-31', 'total_amount' => '24000.00',
+            'currency_code' => 'AED', 'payment_count' => 12, 'payment_mode' => 'cash',
+            'coverage_override' => true,
+            'installments' => $this->agreementInstallments(12),
+        ])->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonValidationErrors(['coverage_override_reason']);
+    }
+
     public function test_multi_property_create_succeeds_when_all_properties_are_free(): void
     {
         $response = $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
