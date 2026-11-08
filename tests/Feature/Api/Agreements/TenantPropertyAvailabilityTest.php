@@ -149,6 +149,21 @@ class TenantPropertyAvailabilityTest extends TestCase
             ->assertJsonValidationErrors(['coverage_override_reason']);
     }
 
+    public function test_coverage_override_rejects_unicode_whitespace_reason(): void
+    {
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
+            'tenant_customer_id' => $this->tenantId,
+            'properties' => [['property_id' => $this->propertyA, 'source_owner_agreement_id' => $this->ownerAgreementId]],
+            'start_date' => '2026-01-01', 'end_date' => '2027-12-31', 'total_amount' => '24000.00',
+            'currency_code' => 'AED', 'payment_count' => 12, 'payment_mode' => 'cash',
+            'coverage_override' => true,
+            'coverage_override_reason' => "\u{00A0}",
+            'installments' => $this->agreementInstallments(12),
+        ])->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonValidationErrors(['coverage_override_reason']);
+    }
+
     public function test_authorized_coverage_override_creates_with_warning_and_audit(): void
     {
         $response = $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
