@@ -28,7 +28,7 @@ trait ApiScenario
             ['key' => 'owner', 'name' => 'Owner', 'scope' => 'branch', 'is_system' => false, 'created_at' => $now, 'updated_at' => $now],
             ['key' => 'tenant', 'name' => 'Tenant', 'scope' => 'branch', 'is_system' => false, 'created_at' => $now, 'updated_at' => $now],
         ]);
-        foreach (['accounts.view', 'accounts.post', 'accounts.void', 'audit.view', 'agreements.manage', 'billing.manage', 'maintenance.manage'] as $key) {
+        foreach (['accounts.view', 'accounts.post', 'accounts.void', 'audit.view', 'agreements.manage', 'agreements.override_coverage', 'billing.manage', 'maintenance.manage'] as $key) {
             DB::table('permissions')->updateOrInsert(
                 ['key' => $key],
                 ['name' => $key, 'created_at' => $now, 'updated_at' => $now],

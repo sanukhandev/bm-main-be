@@ -38,6 +38,7 @@ class RoleSeeder extends Seeder
             ['key' => 'accounts.void', 'name' => 'Void financial transactions'],
             ['key' => 'audit.view', 'name' => 'View audit trail'],
             ['key' => 'agreements.manage', 'name' => 'Manage agreement workflows'],
+            ['key' => 'agreements.override_coverage', 'name' => 'Override owner agreement coverage'],
             ['key' => 'billing.manage', 'name' => 'Manage billing documents'],
             ['key' => 'maintenance.manage', 'name' => 'Manage maintenance and inventory'],
         ])->map(fn (array $permission) => [...$permission, 'created_at' => $now, 'updated_at' => $now]);
@@ -46,7 +47,7 @@ class RoleSeeder extends Seeder
         $roleIds = DB::table('roles')->whereIn('key', ['super_admin', 'branch_admin'])->pluck('id');
         $permissionIds = DB::table('permissions')->whereIn('key', [
             'accounts.view', 'accounts.post', 'accounts.void', 'audit.view',
-            'agreements.manage', 'billing.manage', 'maintenance.manage',
+            'agreements.manage', 'agreements.override_coverage', 'billing.manage', 'maintenance.manage',
         ])->pluck('id');
         foreach ($roleIds as $roleId) {
             foreach ($permissionIds as $permissionId) {
