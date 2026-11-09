@@ -62,14 +62,19 @@ class TenantAgreementController extends Controller
             unset($data['coverage_override'], $data['coverage_override_reason']);
             $data['agreement_no'] ??= $numbers->next($branchContext->branch(), 'TENANT_AGREEMENT', (int) date('Y', strtotime($data['start_date'])));
             $agreement = new TenantAgreement($data);
-            $agreement->forceFill(['branch_id' => $branchContext->id(), 'status' => 'draft'])->save();
+            $agreement->forceFill([
+                'branch_id' => $branchContext->id(),
+                'status' => 'draft',
+                'coverage_override' => $coverageOverride,
+                'coverage_override_reason' => $coverageOverride ? $coverageOverrideReason : null,
+            ])->save();
             foreach ($properties as $property) {
                 $agreement->properties()->attach($property['property_id'], [
                     'branch_id' => $branchContext->id(),
                     'source_owner_agreement_id' => $property['source_owner_agreement_id'],
                 ]);
             }
-            $schedules->create('tenant', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode, $installments);
+            $schedules->create('tenant', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->end_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode, $installments);
             app(AuditService::class)->record('tenant_agreement.created', $agreement, null, [
                 'agreement_no' => $agreement->agreement_no,
                 'file_no' => $agreement->file_no,
@@ -154,7 +159,7 @@ class TenantAgreementController extends Controller
             }
             if ($installments !== null) {
                 $tenantAgreement->installments()->delete();
-                $schedules->create('tenant', $tenantAgreement->id, $branchContext->id(), $tenantAgreement->start_date->format('Y-m-d'), $tenantAgreement->payment_count, $tenantAgreement->total_amount, $tenantAgreement->payment_frequency ?: 'monthly', $tenantAgreement->payment_mode, $installments);
+                $schedules->create('tenant', $tenantAgreement->id, $branchContext->id(), $tenantAgreement->start_date->format('Y-m-d'), $tenantAgreement->end_date->format('Y-m-d'), $tenantAgreement->payment_count, $tenantAgreement->total_amount, $tenantAgreement->payment_frequency ?: 'monthly', $tenantAgreement->payment_mode, $installments);
             }
             $tenantAgreement->increment('lock_version');
             app(AuditService::class)->record(

@@ -134,7 +134,7 @@ class AgreementLifecycleService
                     $new->properties()->attach($property['property_id'], ['branch_id' => $branchId, 'source_owner_agreement_id' => $property['source_owner_agreement_id']]);
                 }
             }
-            $schedules->create($type, $new->id, $branchId, $new->start_date->format('Y-m-d'), $new->payment_count, $new->total_amount, $new->payment_frequency ?: 'monthly', $new->payment_mode);
+            $schedules->create($type, $new->id, $branchId, $new->start_date->format('Y-m-d'), $new->end_date->format('Y-m-d'), $new->payment_count, $new->total_amount, $new->payment_frequency ?: 'monthly', $new->payment_mode);
             $this->history($type, $source, $source->status, $source->status, 'renew', 'Renewed as agreement '.$new->agreement_no, $userId, ['renewed_agreement_id' => $new->id]);
             $this->history($type, $new, null, AgreementStatus::Draft->value, 'renew', null, $userId, ['renewed_from_agreement_id' => $source->id]);
             app(AuditService::class)->record($type.'_agreement.renewed', $source, null, null, ['source_agreement_id' => $source->id, 'new_agreement_id' => $new->id, 'new_agreement_number' => $new->agreement_no], $branchId, $userId);
@@ -182,7 +182,7 @@ class AgreementLifecycleService
             $start = CarbonImmutable::parse($agreement->start_date);
             $end = CarbonImmutable::parse($agreement->end_date);
             $this->availability($branchId)->lockProperties($branchId, array_column($properties, 'property_id'));
-            $this->availability($branchId)->assertOwnerCoverage($branchId, $properties, $start, $end);
+            $this->availability($branchId)->assertOwnerCoverage($branchId, $properties, $start, $end, (bool) $agreement->coverage_override);
             $this->availability($branchId)->assertAvailable($branchId, array_column($properties, 'property_id'), $start, $end, $agreement->id);
         }
     }
