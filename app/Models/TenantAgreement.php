@@ -17,9 +17,9 @@ class TenantAgreement extends Model
 
     protected $fillable = [
         'agreement_no',
-            'file_no',
-            'coverage_override',
-            'coverage_override_reason',
+        'file_no',
+        'coverage_override',
+        'coverage_override_reason',
         'tenant_customer_id',
         'start_date',
         'end_date',
