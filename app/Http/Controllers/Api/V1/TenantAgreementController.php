@@ -38,8 +38,15 @@ class TenantAgreementController extends Controller
     {
         Gate::authorize('create', TenantAgreement::class);
         $data = $request->validated();
+        $coverageOverride = (bool) ($data['coverage_override'] ?? false);
+        $coverageOverrideReason = trim((string) ($data['coverage_override_reason'] ?? ''));
+        if ($coverageOverride && ! $request->user()->hasPermission('agreements.override_coverage', $branchContext->id())) {
+            abort(403, 'The user is not authorized to override owner agreement coverage.');
+        }
         $this->ensureTenantRole($branchContext->id(), $data['tenant_customer_id']);
-        $agreement = DB::transaction(function () use ($data, $branchContext, $numbers, $schedules, $availability) {
+        $actorId = $request->user()->getAuthIdentifier();
+        $ownerCoverages = [];
+        $agreement = DB::transaction(function () use ($data, $branchContext, $numbers, $schedules, $availability, $coverageOverride, $coverageOverrideReason, $actorId, &$ownerCoverages) {
             $properties = $data['properties'];
             $installments = $data['installments'];
             $startDate = CarbonImmutable::parse($data['start_date']);
@@ -48,20 +55,26 @@ class TenantAgreementController extends Controller
             if (count($lockedProperties) !== count($properties)) {
                 throw new ApiException('PROPERTY_NOT_FOUND', 'One or more selected properties are not available in the active branch.', 404);
             }
-            $availability->assertOwnerCoverage($branchContext->id(), $properties, $startDate, $endDate);
+            $ownerCoverages = $availability->assertOwnerCoverage($branchContext->id(), $properties, $startDate, $endDate, $coverageOverride);
             $availability->assertAvailable($branchContext->id(), array_column($properties, 'property_id'), $startDate, $endDate);
             unset($data['properties']);
             unset($data['installments']);
+            unset($data['coverage_override'], $data['coverage_override_reason']);
             $data['agreement_no'] ??= $numbers->next($branchContext->branch(), 'TENANT_AGREEMENT', (int) date('Y', strtotime($data['start_date'])));
             $agreement = new TenantAgreement($data);
-            $agreement->forceFill(['branch_id' => $branchContext->id(), 'status' => 'draft'])->save();
+            $agreement->forceFill([
+                'branch_id' => $branchContext->id(),
+                'status' => 'draft',
+                'coverage_override' => $coverageOverride,
+                'coverage_override_reason' => $coverageOverride ? $coverageOverrideReason : null,
+            ])->save();
             foreach ($properties as $property) {
                 $agreement->properties()->attach($property['property_id'], [
                     'branch_id' => $branchContext->id(),
                     'source_owner_agreement_id' => $property['source_owner_agreement_id'],
                 ]);
             }
-            $schedules->create('tenant', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode, $installments);
+            $schedules->create('tenant', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->end_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode, $installments);
             app(AuditService::class)->record('tenant_agreement.created', $agreement, null, [
                 'agreement_no' => $agreement->agreement_no,
                 'file_no' => $agreement->file_no,
@@ -72,10 +85,28 @@ class TenantAgreementController extends Controller
                 'total_amount' => $agreement->total_amount,
             ], ['installments' => collect($installments)->map(fn (array $line) => collect($line)->only(['installment_no', 'due_date', 'amount', 'category', 'particulars'])->all())->all()]);
 
+            if ($coverageOverride) {
+                app(AuditService::class)->record('tenant_agreement.coverage_overridden', $agreement, null, null, [
+                    'reason' => $coverageOverrideReason,
+                    'source_owner_agreement_ids' => array_values(array_unique(array_column($ownerCoverages, 'owner_agreement_id'))),
+                    'tenant_start_date' => $startDate->toDateString(),
+                    'tenant_end_date' => $endDate->toDateString(),
+                    'owner_coverages' => $ownerCoverages,
+                ], $branchContext->id(), $actorId);
+            }
+
             return $agreement;
         });
 
-        return new TenantAgreementResource($agreement->load(['tenant', 'properties', 'installments.allocations.transaction']));
+        $resource = new TenantAgreementResource($agreement->load(['tenant', 'properties', 'installments.allocations.transaction']));
+        if ($coverageOverride) {
+            $resource->additional(['warnings' => [[
+                'code' => 'OWNER_AGREEMENT_COVERAGE_OVERRIDDEN',
+                'message' => 'Tenant dates exceed the source owner agreement coverage by authorization.',
+            ]]]);
+        }
+
+        return $resource;
     }
 
     public function show(TenantAgreement $tenantAgreement): TenantAgreementResource
@@ -128,7 +159,7 @@ class TenantAgreementController extends Controller
             }
             if ($installments !== null) {
                 $tenantAgreement->installments()->delete();
-                $schedules->create('tenant', $tenantAgreement->id, $branchContext->id(), $tenantAgreement->start_date->format('Y-m-d'), $tenantAgreement->payment_count, $tenantAgreement->total_amount, $tenantAgreement->payment_frequency ?: 'monthly', $tenantAgreement->payment_mode, $installments);
+                $schedules->create('tenant', $tenantAgreement->id, $branchContext->id(), $tenantAgreement->start_date->format('Y-m-d'), $tenantAgreement->end_date->format('Y-m-d'), $tenantAgreement->payment_count, $tenantAgreement->total_amount, $tenantAgreement->payment_frequency ?: 'monthly', $tenantAgreement->payment_mode, $installments);
             }
             $tenantAgreement->increment('lock_version');
             app(AuditService::class)->record(

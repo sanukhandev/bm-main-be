@@ -34,6 +34,8 @@ class StoreTenantAgreementRequest extends FormRequest
             'payment_count' => ['required', 'integer', 'min:1'],
             'payment_frequency' => ['nullable', 'string', 'max:30'],
             'payment_mode' => ['required', 'in:cash,cheque,bank_transfer'],
+            'coverage_override' => ['boolean'],
+            'coverage_override_reason' => ['nullable', 'string', 'max:2000', 'required_if:coverage_override,true'],
             'installments' => ['required', 'array'],
             'installments.*.installment_no' => ['required', 'integer', 'distinct', 'min:1'],
             'installments.*.due_date' => ['sometimes', 'date_format:Y-m-d'],
@@ -47,7 +49,10 @@ class StoreTenantAgreementRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        $this->merge(['currency_code' => $this->input('currency_code') ?: 'AED']);
+        $this->merge([
+            'currency_code' => $this->input('currency_code') ?: 'AED',
+            'coverage_override' => $this->boolean('coverage_override'),
+        ]);
     }
 
     protected function passedValidation(): void
