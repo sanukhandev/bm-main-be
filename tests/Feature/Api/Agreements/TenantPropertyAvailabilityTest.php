@@ -101,6 +101,13 @@ class TenantPropertyAvailabilityTest extends TestCase
             ->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
     }
 
+    public function test_source_owner_properties_remain_selectable_when_tenant_end_exceeds_owner_end(): void
+    {
+        $this->branchRequest()->getJson('/api/v1/properties/available?start_date=2026-02-01&end_date=2027-12-31&source_owner_agreement_id='.$this->ownerAgreementId)
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $this->propertyA);
+    }
+
     public function test_overlapping_create_fails_and_multi_property_create_is_atomic(): void
     {
         $this->tenantAgreement('approved', '2026-04-01', '2026-05-31', $this->propertyA);
@@ -186,6 +193,14 @@ class TenantPropertyAvailabilityTest extends TestCase
         $this->assertSame('Owner renewal is pending signature.', $metadata['reason']);
         $this->assertSame('2027-12-31', $metadata['tenant_end_date']);
         $this->assertSame('2026-12-31', $metadata['owner_coverages'][0]['end_date']);
+
+        $agreementId = $response->json('data.id');
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements/'.$agreementId.'/submit')
+            ->assertOk()
+            ->assertJsonPath('data.status', 'pending_approval');
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements/'.$agreementId.'/approve')
+            ->assertOk()
+            ->assertJsonPath('data.status', 'approved');
     }
 
     public function test_coverage_override_requires_permission(): void

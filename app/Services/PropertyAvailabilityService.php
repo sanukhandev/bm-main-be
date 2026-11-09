@@ -120,7 +120,7 @@ class PropertyAvailabilityService
                 ->where('coverage.branch_id', $branchId)
                 ->whereNull('owners.deleted_at')
                 ->where('owners.start_date', '<=', $startDate->toDateString())
-                ->where('owners.end_date', '>=', $endDate->toDateString())
+                ->when(! $sourceOwnerAgreementId, fn ($query) => $query->where('owners.end_date', '>=', $endDate->toDateString()))
                 ->whereNotIn('owners.status', self::NON_USABLE_OWNER_STATUSES)
                 ->when($sourceOwnerAgreementId, fn ($query) => $query->where('coverage.owner_agreement_id', $sourceOwnerAgreementId));
         });

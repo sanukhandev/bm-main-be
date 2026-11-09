@@ -180,4 +180,32 @@ class AgreementBoundaryTest extends TestCase
             ],
         ])->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
     }
+
+    public function test_generated_installments_stay_within_the_agreement_period(): void
+    {
+        $response = $this->branchRequest()->postJson('/api/v1/owner-agreements', [
+            'owner_customer_id' => $this->customerA,
+            'property_ids' => [$this->propertyId],
+            'start_date' => '2026-11-01',
+            'end_date' => '2027-11-30',
+            'total_amount' => '120000.00',
+            'payment_count' => 6,
+            'payment_frequency' => 'quarterly',
+            'payment_mode' => 'cheque',
+            'installments' => collect(range(1, 6))->map(fn (int $number) => [
+                'installment_no' => $number,
+                'category' => 'rent',
+                'particulars' => 'Quarter '.$number,
+            ])->all(),
+        ])->assertCreated();
+
+        $this->assertSame([
+            '2026-11-01',
+            '2027-02-01',
+            '2027-05-01',
+            '2027-08-01',
+            '2027-11-01',
+            '2027-11-30',
+        ], collect($response->json('data.installments'))->pluck('due_date')->all());
+    }
 }
