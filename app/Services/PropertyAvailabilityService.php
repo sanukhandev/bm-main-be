@@ -64,8 +64,10 @@ class PropertyAvailabilityService
         }
     }
 
-    public function assertOwnerCoverage(int $branchId, array $properties, CarbonImmutable $startDate, CarbonImmutable $endDate): void
+    public function assertOwnerCoverage(int $branchId, array $properties, CarbonImmutable $startDate, CarbonImmutable $endDate, bool $allowOutsideCoverage = false): array
     {
+        $coverages = [];
+
         foreach ($properties as $property) {
             $ownerAgreement = OwnerAgreement::query()
                 ->forBranch($branchId)
@@ -86,10 +88,21 @@ class PropertyAvailabilityService
                 throw new ApiException('PROPERTY_COVERAGE_REQUIRED', 'Each tenant property must be covered by its source owner agreement.', 422);
             }
 
-            if ($startDate->lt(CarbonImmutable::parse($ownerAgreement->start_date)) || $endDate->gt(CarbonImmutable::parse($ownerAgreement->end_date))) {
+            $ownerStartDate = CarbonImmutable::parse($ownerAgreement->start_date);
+            $ownerEndDate = CarbonImmutable::parse($ownerAgreement->end_date);
+            if (! $allowOutsideCoverage && ($startDate->lt($ownerStartDate) || $endDate->gt($ownerEndDate))) {
                 throw new ApiException('OWNER_AGREEMENT_DATE_COVERAGE_REQUIRED', 'Tenant agreement dates must be within the source owner agreement period.', 422);
             }
+
+            $coverages[] = [
+                'property_id' => (int) $property['property_id'],
+                'owner_agreement_id' => (int) $ownerAgreement->id,
+                'start_date' => $ownerStartDate->toDateString(),
+                'end_date' => $ownerEndDate->toDateString(),
+            ];
         }
+
+        return $coverages;
     }
 
     public function availablePropertiesQuery(int $branchId, CarbonImmutable $startDate, CarbonImmutable $endDate, ?int $sourceOwnerAgreementId = null, ?int $excludeTenantAgreementId = null): Builder
@@ -107,7 +120,7 @@ class PropertyAvailabilityService
                 ->where('coverage.branch_id', $branchId)
                 ->whereNull('owners.deleted_at')
                 ->where('owners.start_date', '<=', $startDate->toDateString())
-                ->where('owners.end_date', '>=', $endDate->toDateString())
+                ->when(! $sourceOwnerAgreementId, fn ($query) => $query->where('owners.end_date', '>=', $endDate->toDateString()))
                 ->whereNotIn('owners.status', self::NON_USABLE_OWNER_STATUSES)
                 ->when($sourceOwnerAgreementId, fn ($query) => $query->where('coverage.owner_agreement_id', $sourceOwnerAgreementId));
         });

@@ -51,7 +51,7 @@ class OwnerAgreementController extends Controller
                 'branch_id' => $branchContext->id(),
                 'owner_customer_id' => $agreement->owner_customer_id,
             ]);
-            $schedules->create('owner', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode, $installments);
+            $schedules->create('owner', $agreement->id, $branchContext->id(), $agreement->start_date->format('Y-m-d'), $agreement->end_date->format('Y-m-d'), $agreement->payment_count, $agreement->total_amount, $agreement->payment_frequency ?: 'monthly', $agreement->payment_mode, $installments);
             app(AuditService::class)->record('owner_agreement.created', $agreement, null, [
                 'agreement_no' => $agreement->agreement_no,
                 'file_no' => $agreement->file_no,
@@ -102,7 +102,7 @@ class OwnerAgreementController extends Controller
             }
             if ($installments !== null) {
                 $ownerAgreement->installments()->delete();
-                $schedules->create('owner', $ownerAgreement->id, $branchContext->id(), $ownerAgreement->start_date->format('Y-m-d'), $ownerAgreement->payment_count, $ownerAgreement->total_amount, $ownerAgreement->payment_frequency ?: 'monthly', $ownerAgreement->payment_mode, $installments);
+                $schedules->create('owner', $ownerAgreement->id, $branchContext->id(), $ownerAgreement->start_date->format('Y-m-d'), $ownerAgreement->end_date->format('Y-m-d'), $ownerAgreement->payment_count, $ownerAgreement->total_amount, $ownerAgreement->payment_frequency ?: 'monthly', $ownerAgreement->payment_mode, $installments);
             }
             $ownerAgreement->increment('lock_version');
             app(AuditService::class)->record(

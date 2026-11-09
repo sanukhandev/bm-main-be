@@ -17,7 +17,9 @@ class TenantAgreement extends Model
 
     protected $fillable = [
         'agreement_no',
-        'file_no',
+            'file_no',
+            'coverage_override',
+            'coverage_override_reason',
         'tenant_customer_id',
         'start_date',
         'end_date',
@@ -36,6 +38,7 @@ class TenantAgreement extends Model
             'start_date' => 'date:Y-m-d',
             'end_date' => 'date:Y-m-d',
             'total_amount' => 'decimal:2',
+            'coverage_override' => 'boolean',
             'submitted_at' => 'datetime',
             'held_at' => 'datetime',
             'approved_at' => 'datetime',

@@ -101,6 +101,13 @@ class TenantPropertyAvailabilityTest extends TestCase
             ->assertUnprocessable()->assertJsonPath('code', 'VALIDATION_ERROR');
     }
 
+    public function test_source_owner_properties_remain_selectable_when_tenant_end_exceeds_owner_end(): void
+    {
+        $this->branchRequest()->getJson('/api/v1/properties/available?start_date=2026-02-01&end_date=2027-12-31&source_owner_agreement_id='.$this->ownerAgreementId)
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $this->propertyA);
+    }
+
     public function test_overlapping_create_fails_and_multi_property_create_is_atomic(): void
     {
         $this->tenantAgreement('approved', '2026-04-01', '2026-05-31', $this->propertyA);
@@ -131,6 +138,104 @@ class TenantPropertyAvailabilityTest extends TestCase
         ];
         $this->branchRequest()->postJson('/api/v1/tenant-agreements', $payload)
             ->assertUnprocessable()->assertJsonPath('code', 'OWNER_AGREEMENT_DATE_COVERAGE_REQUIRED');
+    }
+
+    public function test_coverage_override_requires_a_reason(): void
+    {
+        $this->assertDatabaseHas('permissions', ['key' => 'agreements.override_coverage']);
+
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
+            'tenant_customer_id' => $this->tenantId,
+            'properties' => [['property_id' => $this->propertyA, 'source_owner_agreement_id' => $this->ownerAgreementId]],
+            'start_date' => '2026-01-01', 'end_date' => '2027-12-31', 'total_amount' => '24000.00',
+            'currency_code' => 'AED', 'payment_count' => 12, 'payment_mode' => 'cash',
+            'coverage_override' => true,
+            'installments' => $this->agreementInstallments(12),
+        ])->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonValidationErrors(['coverage_override_reason']);
+    }
+
+    public function test_coverage_override_rejects_unicode_whitespace_reason(): void
+    {
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
+            'tenant_customer_id' => $this->tenantId,
+            'properties' => [['property_id' => $this->propertyA, 'source_owner_agreement_id' => $this->ownerAgreementId]],
+            'start_date' => '2026-01-01', 'end_date' => '2027-12-31', 'total_amount' => '24000.00',
+            'currency_code' => 'AED', 'payment_count' => 12, 'payment_mode' => 'cash',
+            'coverage_override' => true,
+            'coverage_override_reason' => "\u{00A0}",
+            'installments' => $this->agreementInstallments(12),
+        ])->assertUnprocessable()
+            ->assertJsonPath('code', 'VALIDATION_ERROR')
+            ->assertJsonValidationErrors(['coverage_override_reason']);
+    }
+
+    public function test_authorized_coverage_override_creates_with_warning_and_audit(): void
+    {
+        $response = $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
+            'tenant_customer_id' => $this->tenantId,
+            'properties' => [['property_id' => $this->propertyA, 'source_owner_agreement_id' => $this->ownerAgreementId]],
+            'start_date' => '2026-01-01', 'end_date' => '2027-12-31', 'total_amount' => '24000.00',
+            'currency_code' => 'AED', 'payment_count' => 24, 'payment_mode' => 'cash',
+            'coverage_override' => true,
+            'coverage_override_reason' => 'Owner renewal is pending signature.',
+            'installments' => $this->agreementInstallments(24),
+        ])->assertCreated()
+            ->assertJsonPath('data.end_date', '2027-12-31')
+            ->assertJsonPath('warnings.0.code', 'OWNER_AGREEMENT_COVERAGE_OVERRIDDEN');
+
+        $audit = DB::table('audit_logs')->where('action', 'tenant_agreement.coverage_overridden')->latest('id')->first();
+        $this->assertNotNull($audit);
+        $this->assertSame($this->apiUser->id, $audit->actor_user_id);
+        $this->assertSame($this->branchA, $audit->branch_id);
+        $metadata = json_decode($audit->metadata_json, true);
+        $this->assertSame('Owner renewal is pending signature.', $metadata['reason']);
+        $this->assertSame('2027-12-31', $metadata['tenant_end_date']);
+        $this->assertSame('2026-12-31', $metadata['owner_coverages'][0]['end_date']);
+
+        $agreementId = $response->json('data.id');
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements/'.$agreementId.'/submit')
+            ->assertOk()
+            ->assertJsonPath('data.status', 'pending_approval');
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements/'.$agreementId.'/approve')
+            ->assertOk()
+            ->assertJsonPath('data.status', 'approved');
+    }
+
+    public function test_coverage_override_requires_permission(): void
+    {
+        DB::table('role_permissions')
+            ->where('role_id', DB::table('roles')->where('key', 'branch_admin')->value('id'))
+            ->where('permission_id', DB::table('permissions')->where('key', 'agreements.override_coverage')->value('id'))
+            ->delete();
+
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
+            'tenant_customer_id' => $this->tenantId,
+            'properties' => [['property_id' => $this->propertyA, 'source_owner_agreement_id' => $this->ownerAgreementId]],
+            'start_date' => '2026-01-01', 'end_date' => '2027-12-31', 'total_amount' => '24000.00',
+            'currency_code' => 'AED', 'payment_count' => 24, 'payment_mode' => 'cash',
+            'coverage_override' => true,
+            'coverage_override_reason' => 'Authorized business exception.',
+            'installments' => $this->agreementInstallments(24),
+        ])->assertForbidden();
+
+        $this->assertDatabaseMissing('tenant_agreements', ['tenant_customer_id' => $this->tenantId, 'end_date' => '2027-12-31']);
+    }
+
+    public function test_coverage_override_does_not_bypass_tenant_occupancy(): void
+    {
+        $this->tenantAgreement('approved', '2026-04-01', '2026-05-31', $this->propertyA);
+
+        $this->branchRequest()->postJson('/api/v1/tenant-agreements', [
+            'tenant_customer_id' => $this->tenantId,
+            'properties' => [['property_id' => $this->propertyA, 'source_owner_agreement_id' => $this->ownerAgreementId]],
+            'start_date' => '2026-01-01', 'end_date' => '2027-12-31', 'total_amount' => '24000.00',
+            'currency_code' => 'AED', 'payment_count' => 24, 'payment_mode' => 'cash',
+            'coverage_override' => true,
+            'coverage_override_reason' => 'Authorized business exception.',
+            'installments' => $this->agreementInstallments(24),
+        ])->assertStatus(409)->assertJsonPath('code', 'PROPERTY_NOT_AVAILABLE');
     }
 
     public function test_multi_property_create_succeeds_when_all_properties_are_free(): void
