@@ -510,8 +510,14 @@ class ApiFoundationTest extends TestCase
                 'property_code' => 'PROP-001',
                 'property_type' => 'apartment',
                 'name' => 'Flat 101',
+                'plot_number' => 'PLOT-101',
+                'usage' => 'residential',
+                'landmark' => 'Near Central Park',
             ])
             ->assertCreated()
+            ->assertJsonPath('data.plot_number', 'PLOT-101')
+            ->assertJsonPath('data.usage', 'residential')
+            ->assertJsonPath('data.landmark', 'Near Central Park')
             ->json('data');
 
         $ownerAgreement = $this->withHeader('X-Branch-Id', (string) $this->branchA)
@@ -581,6 +587,46 @@ class ApiFoundationTest extends TestCase
             ->assertNoContent();
         $this->assertDatabaseHas('customers', ['id' => $this->customerA, 'status' => 'archived']);
         $this->assertNotNull(DB::table('customers')->where('id', $this->customerA)->value('deleted_at'));
+    }
+
+    public function test_property_usage_accepts_supported_values_and_rejects_unknown_values(): void
+    {
+        DB::table('roles')->insert([
+            'key' => 'owner', 'name' => 'Owner', 'scope' => 'branch', 'is_system' => false,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('customer_role_assignments')->insert([
+            'branch_id' => $this->branchA,
+            'customer_id' => $this->customerA,
+            'role' => 'owner',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $this->actingAs($this->branchUser, 'web');
+
+        foreach (['residential', 'commercial', 'others'] as $index => $usage) {
+            $this->withHeader('X-Branch-Id', (string) $this->branchA)
+                ->postJson('/api/v1/properties', [
+                    'owner_customer_id' => $this->customerA,
+                    'property_code' => 'USAGE-'.($index + 1),
+                    'property_type' => 'apartment',
+                    'name' => 'Usage Property '.($index + 1),
+                    'usage' => $usage,
+                ])
+                ->assertCreated()
+                ->assertJsonPath('data.usage', $usage);
+        }
+
+        $this->withHeader('X-Branch-Id', (string) $this->branchA)
+            ->postJson('/api/v1/properties', [
+                'owner_customer_id' => $this->customerA,
+                'property_code' => 'USAGE-INVALID',
+                'property_type' => 'apartment',
+                'name' => 'Invalid Usage Property',
+                'usage' => 'industrial',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['usage']);
     }
 
     private function customer(int $branchId, string $code): int

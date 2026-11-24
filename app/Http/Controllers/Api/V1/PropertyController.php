@@ -151,7 +151,7 @@ class PropertyController extends Controller
 
     private function auditFields(): array
     {
-        return ['owner_customer_id', 'property_code', 'unit_number', 'property_type', 'name', 'building_name', 'state_or_emirate', 'area', 'electricity_provider', 'electricity_account_number', 'cooling_provider', 'cooling_account_number', 'gas_provider', 'gas_connection_type', 'gas_connection_number', 'utility_details_json', 'status'];
+        return ['owner_customer_id', 'property_code', 'unit_number', 'plot_number', 'usage', 'property_type', 'name', 'building_name', 'landmark', 'state_or_emirate', 'area', 'electricity_provider', 'electricity_account_number', 'cooling_provider', 'cooling_account_number', 'gas_provider', 'gas_connection_type', 'gas_connection_number', 'utility_details_json', 'status'];
     }
 
     private function applyUtilityDetails(array $data, ?Property $property = null): array

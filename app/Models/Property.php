@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PropertyType;
+use App\Enums\PropertyUsage;
 use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -18,9 +19,12 @@ class Property extends Model
         'owner_customer_id',
         'property_code',
         'unit_number',
+        'plot_number',
+        'usage',
         'property_type',
         'name',
         'building_name',
+        'landmark',
         'address_line_1',
         'address_line_2',
         'city',
@@ -43,6 +47,7 @@ class Property extends Model
     {
         return [
             'property_type' => PropertyType::class,
+            'usage' => PropertyUsage::class,
             'area' => 'decimal:4',
             'metadata_json' => 'array',
             'utility_details_json' => 'array',

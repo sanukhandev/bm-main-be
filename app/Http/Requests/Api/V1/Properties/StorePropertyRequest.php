@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Api\V1\Properties;
 
 use App\Enums\PropertyType;
+use App\Enums\PropertyUsage;
 use App\Support\Branch\BranchContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -22,9 +23,12 @@ class StorePropertyRequest extends FormRequest
             'owner_customer_id' => ['required', 'integer', Rule::exists('customers', 'id')->where(fn ($query) => $query->where('branch_id', $branchId)->where('status', 'active'))],
             'property_code' => ['sometimes', 'nullable', 'string', 'max:64', Rule::unique('properties', 'property_code')->where(fn ($query) => $query->where('branch_id', $branchId))],
             'unit_number' => ['nullable', 'string', 'max:100'],
+            'plot_number' => ['nullable', 'string', 'max:100'],
+            'usage' => ['nullable', Rule::enum(PropertyUsage::class)],
             'property_type' => ['required', Rule::enum(PropertyType::class)],
             'name' => ['required', 'string', 'max:255'],
             'building_name' => ['nullable', 'string', 'max:255'],
+            'landmark' => ['nullable', 'string', 'max:255'],
             'address_line_1' => ['nullable', 'string', 'max:255'],
             'address_line_2' => ['nullable', 'string', 'max:255'],
             'city' => ['nullable', 'string', 'max:255'],
