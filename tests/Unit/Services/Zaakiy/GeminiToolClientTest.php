@@ -5,6 +5,8 @@ namespace Tests\Unit\Services\Zaakiy;
 use App\Services\Zaakiy\Agent\GeminiToolClient;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Mockery;
 use Tests\TestCase;
 
 class GeminiToolClientTest extends TestCase
@@ -241,5 +243,25 @@ class GeminiToolClientTest extends TestCase
 
         $this->assertSame(['Streamed from fallback.'], $chunks);
         $this->assertSame('gemini-flash-lite-latest', $result['model']);
+    }
+
+    public function test_failed_upstream_response_does_not_log_response_body(): void
+    {
+        Http::fake(['*generateContent*' => Http::response(['error' => ['message' => 'sensitive-provider-detail']], 400)]);
+        Log::shouldReceive('warning')->once()->with(
+            'Zaakiy Gemini API request failed.',
+            Mockery::on(static fn (array $context): bool => $context === ['model' => 'gemini-flash-latest', 'status' => 400]),
+        );
+
+        try {
+            app(GeminiToolClient::class)->planTurn(
+                'System',
+                [['role' => 'user', 'parts' => [['text' => 'Hi']]]],
+                [],
+            );
+            $this->fail('Expected an upstream error.');
+        } catch (\RuntimeException) {
+            $this->assertTrue(true);
+        }
     }
 }

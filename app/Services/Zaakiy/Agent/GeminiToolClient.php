@@ -264,7 +264,6 @@ class GeminiToolClient
         Log::warning('Zaakiy Gemini API request failed.', [
             'model' => $lastModel,
             'status' => $lastResponse->status(),
-            'body' => substr((string) $lastResponse->body(), 0, 500),
         ]);
 
         if ($lastResponse->status() === 429) {
