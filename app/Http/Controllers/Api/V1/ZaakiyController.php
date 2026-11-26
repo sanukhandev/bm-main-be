@@ -17,35 +17,38 @@ class ZaakiyController extends Controller
         $message = $request->string('message')->toString();
         $history = $request->input('history', []);
         $conversationContext = $request->input('conversation_context');
-        $verifiedContext = $context->build($message, $request->user(), $history, $conversationContext);
-        $presentationEvents = $presentation->build($verifiedContext);
+        $user = $request->user();
 
-        return response()->stream(function () use ($message, $history, $verifiedContext, $zaakiy, $presentationEvents): void {
+        return response()->stream(function () use ($message, $history, $conversationContext, $user, $context, $zaakiy, $presentation): void {
+            $emit = static function (string $event, array $data): void {
+                echo 'event: '.$event."\n";
+                echo 'data: '.json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)."\n\n";
+                if (ob_get_level() > 0) {
+                    ob_flush();
+                }
+                flush();
+            };
+
             try {
-                if (isset($verifiedContext['navigation'])) {
-                    echo "event: navigation\n";
-                    echo 'data: '.json_encode($verifiedContext['navigation'], JSON_THROW_ON_ERROR)."\n\n";
-                    flush();
+                $emit('status', ['label' => 'Analyzing branch data...']);
+
+                $verifiedContext = $context->build($message, $user, $history, $conversationContext);
+                $presentationEvents = $presentation->build($verifiedContext);
+
+                $navigations = $verifiedContext['navigations'] ?? (isset($verifiedContext['navigation']) ? [$verifiedContext['navigation']] : []);
+                foreach ($navigations as $nav) {
+                    if (is_array($nav) && ! empty($nav['url'])) {
+                        $emit('navigation', $nav);
+                    }
                 }
                 foreach ($presentationEvents as $structured) {
-                    echo 'event: '.$structured['event']."\n";
-                    echo 'data: '.json_encode($structured['data'], JSON_THROW_ON_ERROR)."\n\n";
-                    flush();
+                    $emit($structured['event'], $structured['data']);
                 }
-                $zaakiy->stream($message, $history, $verifiedContext, function (string $event, array $data): void {
-                    echo 'event: '.$event."\n";
-                    echo 'data: '.json_encode($data, JSON_THROW_ON_ERROR)."\n\n";
-                    if (ob_get_level() > 0) {
-                        ob_flush();
-                    }
-                    flush();
-                });
-                echo 'event: done'."\n";
-                echo 'data: '.json_encode(['context' => $verifiedContext['conversation_context'] ?? null], JSON_THROW_ON_ERROR)."\n\n";
+                $zaakiy->stream($message, $history, $verifiedContext, $emit);
+                $emit('done', ['context' => $verifiedContext['conversation_context'] ?? null]);
             } catch (Throwable $exception) {
                 report($exception);
-                echo 'event: error'."\n";
-                echo 'data: '.json_encode(['message' => 'Zaakiy is temporarily unavailable. Please try again shortly.'])."\n\n";
+                $emit('error', ['message' => 'Zaakiy is temporarily unavailable. Please try again shortly.']);
             }
         }, 200, [
             'Content-Type' => 'text/event-stream',

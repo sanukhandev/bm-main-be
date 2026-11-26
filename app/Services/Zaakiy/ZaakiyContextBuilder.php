@@ -14,20 +14,33 @@ class ZaakiyContextBuilder
     {
         $conversation ??= new ZaakiyConversationContext;
         $evidence = array_map(static fn ($result): array => $result->toArray(), $results);
-        $navigation = null;
+        $navigations = [];
+        $seen = [];
         foreach ($evidence as $item) {
-            $target = $item['navigation'][0] ?? null;
-            if (is_array($target)) {
-                $navigation = [
-                    'label' => $target['label'] ?? 'Open in Baithul Madeena',
-                    'url' => $target['route'] ?? null,
-                ];
-                if (isset($target['query'])) {
-                    $navigation['query'] = $target['query'];
+            foreach ((array) ($item['navigation'] ?? []) as $target) {
+                if (! is_array($target) || empty($target['route'])) {
+                    continue;
                 }
-                break;
+                $query = isset($target['query']) && is_array($target['query']) && $target['query'] !== [] ? $target['query'] : null;
+                $key = $target['route'].'|'.json_encode($query);
+                if (isset($seen[$key])) {
+                    continue;
+                }
+                $seen[$key] = true;
+                $nav = [
+                    'label' => $target['label'] ?? 'Open in Baithul Madeena',
+                    'url' => $target['route'],
+                ];
+                if ($query !== null) {
+                    $nav['query'] = $query;
+                }
+                $navigations[] = $nav;
+                if (count($navigations) >= 5) {
+                    break 2;
+                }
             }
         }
+        $navigation = $navigations[0] ?? null;
 
         return $this->filter->clean([
             'question' => $intent->question,
@@ -36,6 +49,7 @@ class ZaakiyContextBuilder
             'period' => $intent->timeRange,
             'evidence' => $evidence,
             'navigation' => $navigation,
+            'navigations' => $navigations,
             'conversation_context' => $conversation->toArray(),
             'constraints' => ['read_only' => true, 'backend_values_are_authoritative' => true],
         ]);

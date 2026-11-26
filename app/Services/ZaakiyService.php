@@ -18,7 +18,7 @@ class ZaakiyService
         // never send the unrestricted client history to Gemini.
         $contents = [];
         $skillData = $context;
-        unset($skillData['navigation']);
+        unset($skillData['navigation'], $skillData['navigations']);
         unset($skillData['conversation_context']);
         $skillData['evidence'] = array_map(static function (array $result): array {
             unset($result['navigation'], $result['suggested_followups']);
