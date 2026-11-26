@@ -4,22 +4,46 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ZaakiyChatRequest;
+use App\Services\Zaakiy\Agent\ZaakiyAgentLoop;
 use App\Services\Zaakiy\ZaakiyPresentationBuilder;
 use App\Services\ZaakiyContextService;
 use App\Services\ZaakiyService;
+use App\Support\Branch\BranchContext;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
 class ZaakiyController extends Controller
 {
-    public function chat(ZaakiyChatRequest $request, ZaakiyContextService $context, ZaakiyService $zaakiy, ZaakiyPresentationBuilder $presentation): StreamedResponse
-    {
+    public function chat(
+        ZaakiyChatRequest $request,
+        ZaakiyContextService $context,
+        ZaakiyService $zaakiy,
+        ZaakiyPresentationBuilder $presentation,
+        ZaakiyAgentLoop $agentLoop,
+        BranchContext $branch,
+    ): StreamedResponse {
         $message = $request->string('message')->toString();
         $history = $request->input('history', []);
         $conversationContext = $request->input('conversation_context');
         $user = $request->user();
+        $agenticEnabled = (bool) config('services.zaakiy.agentic_enabled', true);
+        $resolvedThread = $agenticEnabled
+            ? $agentLoop->resolveThread($request->input('thread_id'), $user, $branch)
+            : null;
 
-        return response()->stream(function () use ($message, $history, $conversationContext, $user, $context, $zaakiy, $presentation): void {
+        return response()->stream(function () use (
+            $message,
+            $history,
+            $conversationContext,
+            $user,
+            $context,
+            $zaakiy,
+            $presentation,
+            $agentLoop,
+            $branch,
+            $agenticEnabled,
+            $resolvedThread,
+        ): void {
             $emit = static function (string $event, array $data): void {
                 echo 'event: '.$event."\n";
                 echo 'data: '.json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)."\n\n";
@@ -30,6 +54,12 @@ class ZaakiyController extends Controller
             };
 
             try {
+                if ($agenticEnabled) {
+                    $agentLoop->run($message, $resolvedThread, $user, $branch, $emit);
+
+                    return;
+                }
+
                 $emit('status', ['label' => 'Analyzing branch data...']);
 
                 $verifiedContext = $context->build($message, $user, $history, $conversationContext);

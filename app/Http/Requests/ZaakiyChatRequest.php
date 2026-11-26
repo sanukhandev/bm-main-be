@@ -15,6 +15,7 @@ class ZaakiyChatRequest extends FormRequest
     {
         return [
             'message' => ['required', 'string', 'min:1', 'max:4000'],
+            'thread_id' => ['nullable', 'uuid'],
             'history' => ['sometimes', 'array', 'max:20'],
             'history.*.role' => ['required', 'in:user,model'],
             'history.*.text' => ['required', 'string', 'max:4000'],

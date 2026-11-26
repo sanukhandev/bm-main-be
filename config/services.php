@@ -37,8 +37,15 @@ return [
 
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
-        'model' => env('GEMINI_MODEL', 'gemini-3.1-flash-lite'),
+        'model' => env('GEMINI_MODEL', 'gemini-flash-latest'),
+        'reasoning_model' => env('GEMINI_REASONING_MODEL'),
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
+    ],
+
+    'zaakiy' => [
+        'agentic_enabled' => (bool) env('ZAAKIY_AGENTIC_ENABLED', true),
+        'max_tool_turns' => max(1, (int) env('ZAAKIY_MAX_TOOL_TURNS', 3)),
+        'max_tool_calls' => max(1, (int) env('ZAAKIY_MAX_TOOL_CALLS', 5)),
     ],
 
 ];

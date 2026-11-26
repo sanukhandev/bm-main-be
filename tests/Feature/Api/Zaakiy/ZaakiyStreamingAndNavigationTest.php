@@ -21,6 +21,7 @@ class ZaakiyStreamingAndNavigationTest extends TestCase
         Config::set('services.gemini.key', 'test-gemini-key');
         Config::set('services.gemini.model', 'gemini-3.1-flash-lite');
         Config::set('services.gemini.base_url', 'https://generativelanguage.googleapis.com/v1beta');
+        Config::set('services.zaakiy.agentic_enabled', false);
     }
 
     public function test_chat_stream_emits_initial_status_all_deduplicated_navigations_and_strips_navigations_from_prompt(): void
