@@ -37,8 +37,52 @@ class IntelligentReportPdfService
         }
         $findings = collect($report['findings'] ?? [])->map(fn (array $finding) => '<tr><td class="severity">'.e(strtoupper($finding['severity'] ?? 'info')).'</td><td>'.e($finding['title'] ?? '').'</td><td>'.e($finding['amount'] ?? '—').'</td><td>'.e($finding['description'] ?? '').'</td></tr>')->implode('');
         $chart = $this->chart($report['trends']['income_vs_cost'] ?? []);
+        $zaakiyHtml = $this->zaakiySection($report['zaakiy'] ?? null);
 
-        return '<!doctype html><html><head><meta charset="utf-8"><style>'.$this->css().'</style></head><body><header><div class="brand">BAITHUL MADEENA</div><h1>Intelligent Report</h1><p>Financial and operational intelligence for '.e($report['scope']['label']).'</p><p class="muted">Period: '.e($report['period']['from']).' to '.e($report['period']['to']).' · Generated: '.e(now()->toDateTimeString()).' · By: '.e($user->name).'</p></header><h2>Executive Financial Position</h2><section class="grid">'.$cardHtml.'</section><h2>Financial Trend</h2>'.$chart.'<h2>Collections & Operations</h2><table><tbody><tr><th>Total Inward</th><td>'.e($summary['total_inward']).'</td><th>Total Outward</th><td>'.e($summary['total_outward']).'</td></tr><tr><th>Tenant Receivables</th><td>'.e($summary['tenant_receivables']).'</td><th>Owner Payables</th><td>'.e($summary['owner_payables']).'</td></tr><tr><th>Pending Cheques</th><td>'.e($summary['pending_cheque_value']).'</td><th>Bounced Cheques</th><td>'.e($summary['bounced_cheque_value']).'</td></tr><tr><th>Occupied / Available</th><td>'.e($summary['occupied_properties'].' / '.$summary['available_properties']).'</td><th>Expiring Agreements</th><td>'.e(($summary['expiring_agreements']['owner'] ?? 0).' owner / '.($summary['expiring_agreements']['tenant'] ?? 0).' tenant').'</td></tr></tbody></table><h2>Leakage Detection</h2><table><thead><tr><th>Severity</th><th>Finding</th><th>Exposure</th><th>Basis</th></tr></thead><tbody>'.$findings.'</tbody></table><p class="note">'.e($report['accounting_note']).'</p></body></html>';
+        return '<!doctype html><html><head><meta charset="utf-8"><style>'.$this->css().'</style></head><body><header><div class="brand">BAITHUL MADEENA</div><h1>Intelligent Report</h1><p>Financial and operational intelligence for '.e($report['scope']['label']).'</p><p class="muted">Period: '.e($report['period']['from']).' to '.e($report['period']['to']).' · Generated: '.e(now()->toDateTimeString()).' · By: '.e($user->name).'</p></header><h2>Executive Financial Position</h2><section class="grid">'.$cardHtml.'</section>'.$zaakiyHtml.'<h2>Financial Trend</h2>'.$chart.'<h2>Collections & Operations</h2><table><tbody><tr><th>Total Inward</th><td>'.e($summary['total_inward']).'</td><th>Total Outward</th><td>'.e($summary['total_outward']).'</td></tr><tr><th>Tenant Receivables</th><td>'.e($summary['tenant_receivables']).'</td><th>Owner Payables</th><td>'.e($summary['owner_payables']).'</td></tr><tr><th>Pending Cheques</th><td>'.e($summary['pending_cheque_value']).'</td><th>Bounced Cheques</th><td>'.e($summary['bounced_cheque_value']).'</td></tr><tr><th>Occupied / Available</th><td>'.e($summary['occupied_properties'].' / '.$summary['available_properties']).'</td><th>Expiring Agreements</th><td>'.e(($summary['expiring_agreements']['owner'] ?? 0).' owner / '.($summary['expiring_agreements']['tenant'] ?? 0).' tenant').'</td></tr></tbody></table><h2>Leakage Detection</h2><table><thead><tr><th>Severity</th><th>Finding</th><th>Exposure</th><th>Basis</th></tr></thead><tbody>'.$findings.'</tbody></table><p class="note">'.e($report['accounting_note']).'</p></body></html>';
+    }
+
+    private function zaakiySection(?array $zaakiy): string
+    {
+        if (! $zaakiy) {
+            return '';
+        }
+
+        $overview = $zaakiy['overview'] ?? [];
+        $skills = $zaakiy['skills'] ?? [];
+        $headline = e((string) ($overview['headline'] ?? ''));
+        $highlights = collect($overview['highlights'] ?? [])
+            ->map(static fn (string $line): string => '<li>'.e($line).'</li>')
+            ->implode('');
+
+        $comparisons = collect($overview['period_comparisons'] ?? [])
+            ->map(static function (array $row): string {
+                $delta = $row['percentage_delta'] !== null
+                    ? (($row['percentage_delta'] >= 0 ? '+' : '').$row['percentage_delta'].'%')
+                    : '—';
+
+                return '<tr><td>'.e((string) ($row['label'] ?? '')).'</td><td>'.e((string) ($row['current_value'] ?? '0')).' '.e((string) ($row['unit'] ?? '')).'</td><td>'.e((string) ($row['comparison_value'] ?? '0')).'</td><td>'.e($delta).'</td></tr>';
+            })
+            ->implode('');
+
+        $col = $skills['collections']['metrics'] ?? [];
+        $vac = $skills['vacancy']['metrics'] ?? [];
+        $risk = $skills['agreement_risk']['metrics'] ?? [];
+        $ren = $skills['renewals']['metrics'] ?? [];
+        $maint = $skills['maintenance']['metrics'] ?? [];
+
+        $skillRows = '<tr><th>Collections Health</th><td>AED '.e((string) ($col['overdue_total'] ?? '0.00')).' overdue ('.e((string) ($col['tenant_count_with_overdue'] ?? 0)).' tenants) · '.e((string) ($col['bounced_cheque_count'] ?? 0)).' bounced cheques</td></tr>'
+            .'<tr><th>Vacancy &amp; Leasing</th><td>'.e((string) ($vac['occupied_property_count'] ?? 0)).' occupied / '.e((string) ($vac['vacant_property_count'] ?? 0)).' vacant ('.e((string) ($vac['occupancy_rate'] ?? 0)).'% occupancy) · '.e((string) ($vac['vacant_properties_with_open_work_orders'] ?? 0)).' vacant w/ maintenance</td></tr>'
+            .'<tr><th>Agreement Risk</th><td>'.e((string) ($risk['agreement_count_needing_attention'] ?? 0)).' flagged · '.e((string) ($risk['coverage_mismatch_count'] ?? 0)).' coverage mismatches · '.e((string) ($risk['expiring_soon_count'] ?? 0)).' expiring in 30d</td></tr>'
+            .'<tr><th>Renewal Pipeline (60d)</th><td>'.e((string) ($ren['renewal_candidate_count'] ?? 0)).' candidates ('.e((string) ($ren['tenant_renewal_count'] ?? 0)).' tenant / '.e((string) ($ren['owner_renewal_count'] ?? 0)).' owner) · '.e((string) ($ren['due_within_30_days_count'] ?? 0)).' due within 30d</td></tr>'
+            .'<tr><th>Maintenance &amp; Backlog</th><td>'.e((string) ($maint['open_work_order_count'] ?? 0)).' open ('.e((string) ($maint['high_priority_open_count'] ?? 0)).' high/urgent) · '.e((string) ($maint['completed_work_order_count'] ?? 0)).' completed · AED '.e((string) ($maint['maintenance_expenditure'] ?? '0.00')).' spent</td></tr>';
+
+        return '<h2>Zaakiy Intelligence Overview</h2>'
+            .'<p><strong>'.$headline.'</strong></p>'
+            .($highlights !== '' ? '<ul>'.$highlights.'</ul>' : '')
+            .($comparisons !== '' ? '<table><thead><tr><th>Metric</th><th>Current</th><th>Prior Period</th><th>Change</th></tr></thead><tbody>'.$comparisons.'</tbody></table>' : '')
+            .'<h2>Zaakiy Operational Skills Summary</h2>'
+            .'<table><tbody>'.$skillRows.'</tbody></table>';
     }
 
     private function chart(array $rows): string

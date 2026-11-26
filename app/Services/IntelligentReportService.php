@@ -3,12 +3,17 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Services\Zaakiy\ZaakiyReportIntelligenceService;
 use App\Support\Branch\BranchContext;
 use Illuminate\Support\Facades\DB;
 
 class IntelligentReportService
 {
     private const ACTIVE_AGREEMENTS = ['approved', 'commenced', 'on_hold'];
+
+    public function __construct(
+        private readonly ?ZaakiyReportIntelligenceService $zaakiyIntelligence = null,
+    ) {}
 
     public function build(User $user, BranchContext $context, array $input): array
     {
@@ -26,12 +31,15 @@ class IntelligentReportService
         $summary = $this->summary($branchIds, $period, $transactions);
         $trends = $this->trends($branchIds, $period);
         $findings = $this->findings($branchIds, $period, $summary);
+        $zaakiyService = $this->zaakiyIntelligence ?? app(ZaakiyReportIntelligenceService::class);
+        $zaakiy = $zaakiyService->build($user, $context, $branchIds, $overall, $period, $summary);
 
         return [
             'data' => [
                 'scope' => ['type' => $overall ? 'overall' : 'branch', 'branch_id' => $overall ? null : $context->id(), 'label' => $overall ? 'Overall Business' : $context->branch()->name],
                 'period' => $period->toArray(), 'summary' => $summary, 'trends' => $trends,
                 'findings' => $findings, 'branch_comparison' => $overall ? $this->branchComparison($branchIds, $period) : [],
+                'zaakiy' => $zaakiy,
                 'accounting_note' => 'Operational profitability is based on financial and operational records captured within Baithul Madeena and is not a statutory accounting Profit & Loss statement.',
             ],
         ];

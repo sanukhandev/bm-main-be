@@ -97,6 +97,12 @@ final class IntelligentReportTool implements ZaakiyAgentTool
                 'summary' => $data['summary'],
                 'findings' => array_slice($data['findings'] ?? [], 0, 6),
                 'trends' => $data['trends'] ?? [],
+                'zaakiy_overview' => [
+                    'headline' => $data['zaakiy']['overview']['headline'] ?? null,
+                    'highlights' => $data['zaakiy']['overview']['highlights'] ?? [],
+                    'attention_items' => array_slice($data['zaakiy']['overview']['attention_items'] ?? [], 0, 5),
+                    'period_comparisons' => $data['zaakiy']['overview']['period_comparisons'] ?? [],
+                ],
                 'accounting_note' => $data['accounting_note'] ?? '',
             ],
             skillResult: $skillResult,
