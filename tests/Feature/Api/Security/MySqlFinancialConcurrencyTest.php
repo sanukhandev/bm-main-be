@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Models\WorkOrderPayment;
 use App\Services\BillingDocumentService;
 use App\Support\Branch\BranchContext;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\DatabaseMigrations;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Concurrency;
@@ -268,6 +269,13 @@ class MySqlFinancialConcurrencyTest extends TestCase
         $this->assertEqualsCanonicalizing(['changed', 'conflict'], $chequeResults);
         $this->assertContains(DB::table('account_transactions')->where('id', $chequeId)->value('cheque_status'), ['cleared', 'bounced']);
         $this->assertSame(1, DB::table('audit_logs')->whereIn('action', ['accounts.cheque_cleared', 'accounts.cheque_bounced'])->where('entity_id', $chequeId)->count());
+
+        $skuResults = Concurrency::driver('process')->run([
+            static fn (): string => self::insertInventorySku($branchId, 'concurrent-sku-001'),
+            static fn (): string => self::insertInventorySku($branchId, 'CONCURRENT-SKU-001'),
+        ]);
+        $this->assertEqualsCanonicalizing(['inserted', 'duplicate'], $skuResults);
+        $this->assertSame(1, DB::table('inventory_items')->where('branch_id', $branchId)->where('sku', 'concurrent-sku-001')->count());
     }
 
     private static function changeChequeStatus(int $branchId, int $transactionId, int $userId, string $action): string
@@ -283,6 +291,28 @@ class MySqlFinancialConcurrencyTest extends TestCase
             return 'changed';
         } catch (ApiException $exception) {
             return $exception->status === 409 ? 'conflict' : 'error';
+        }
+    }
+
+    private static function insertInventorySku(int $branchId, string $sku): string
+    {
+        try {
+            DB::table('inventory_items')->insert([
+                'branch_id' => $branchId,
+                'sku' => $sku,
+                'name' => 'Concurrent SKU test',
+                'unit_of_measure' => 'piece',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            return 'inserted';
+        } catch (QueryException $exception) {
+            if ($exception->getCode() === '23000') {
+                return 'duplicate';
+            }
+
+            throw $exception;
         }
     }
 }
