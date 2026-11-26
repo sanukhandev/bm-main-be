@@ -19,6 +19,7 @@ use App\Http\Controllers\Api\V1\TenantAgreementController;
 use App\Http\Controllers\Api\V1\UserActivityController;
 use App\Http\Controllers\Api\V1\ZaakiyActionController;
 use App\Http\Controllers\Api\V1\ZaakiyController;
+use App\Http\Controllers\Api\V1\ZaakiyMetricsController;
 use App\Http\Controllers\Api\V1\ZaakiyThreadController;
 use Illuminate\Support\Facades\Route;
 
@@ -47,6 +48,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/permissions', [AdministrationController::class, 'permissions']);
         Route::post('/permissions', [AdministrationController::class, 'storePermission']);
         Route::patch('/permissions/{permission}', [AdministrationController::class, 'updatePermission']);
+        Route::get('/zaakiy/metrics', [ZaakiyMetricsController::class, 'index']);
     });
 
     Route::middleware(['api.json', 'auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
