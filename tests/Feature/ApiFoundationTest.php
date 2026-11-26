@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
@@ -387,6 +388,7 @@ class ApiFoundationTest extends TestCase
 
     public function test_identity_document_extraction_verifies_customer_on_create_and_locks_the_id(): void
     {
+        Config::set('services.gemini.key', 'test-gemini-key');
         Http::fake(['*generativelanguage.googleapis.com*' => Http::response([
             'candidates' => [['content' => ['parts' => [['text' => json_encode([
                 'display_name' => 'Ahmed Al Mansoori',
