@@ -2,8 +2,12 @@
 
 namespace App\Services\Zaakiy\Agent;
 
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use stdClass;
 
 class GeminiToolClient
 {
@@ -20,12 +24,11 @@ class GeminiToolClient
         ?string $model = null,
     ): GeminiTurnResponse {
         $key = $this->apiKey();
-        $resolvedModel = $this->resolveModel($model);
-        $url = $this->endpoint($resolvedModel, 'generateContent');
+        $candidates = $this->candidateModels($model);
 
         $payload = [
             'systemInstruction' => ['parts' => [['text' => $systemInstruction]]],
-            'contents' => $contents,
+            'contents' => $this->normalizeContents($contents),
             'generationConfig' => ['temperature' => 0.1, 'maxOutputTokens' => 1200],
         ];
         if ($toolDeclarations !== []) {
@@ -33,15 +36,22 @@ class GeminiToolClient
             $payload['toolConfig'] = ['functionCallingConfig' => ['mode' => 'AUTO']];
         }
 
-        $response = $this->postWithRetry($url, $payload, $key, false);
+        ['response' => $response, 'model' => $resolvedModel] = $this->postWithFailoverAndRetry(
+            $candidates,
+            'generateContent',
+            $payload,
+            $key,
+            false,
+        );
         $data = $response->json();
         if (! is_array($data)) {
             throw new RuntimeException('Zaakiy received an invalid response from the AI service.');
         }
 
-        // Preserve the full raw candidate content verbatim (including thoughtSignature on parts).
+        // Preserve the full raw candidate content verbatim (including thoughtSignature on parts),
+        // ensuring empty JSON objects ({}) in functionCall.args do not round-trip as JSON arrays ([]).
         $rawContent = is_array($data['candidates'][0]['content'] ?? null)
-            ? $data['candidates'][0]['content']
+            ? $this->normalizeContent($data['candidates'][0]['content'])
             : ['role' => 'model', 'parts' => []];
         $parts = is_array($rawContent['parts'] ?? null) ? $rawContent['parts'] : [];
 
@@ -84,16 +94,21 @@ class GeminiToolClient
         ?string $model = null,
     ): array {
         $key = $this->apiKey();
-        $resolvedModel = $this->resolveModel($model);
-        $url = $this->endpoint($resolvedModel, 'streamGenerateContent').'?alt=sse';
+        $candidates = $this->candidateModels($model);
 
         $payload = [
             'systemInstruction' => ['parts' => [['text' => $systemInstruction]]],
-            'contents' => $contents,
+            'contents' => $this->normalizeContents($contents),
             'generationConfig' => ['temperature' => 0.2, 'maxOutputTokens' => 1400],
         ];
 
-        $response = $this->postWithRetry($url, $payload, $key, true);
+        ['response' => $response, 'model' => $resolvedModel] = $this->postWithFailoverAndRetry(
+            $candidates,
+            'streamGenerateContent',
+            $payload,
+            $key,
+            true,
+        );
         $body = $response->toPsrResponse()->getBody();
         $buffer = '';
         $fullText = '';
@@ -138,38 +153,194 @@ class GeminiToolClient
         ];
     }
 
-    private function postWithRetry(string $url, array $payload, string $key, bool $stream)
+    /**
+     * Try primary and fallback models; if all models hit 429, retry up to 3 times with 3s delay.
+     *
+     * @param  array<int, string>  $models
+     * @param  array<string, mixed>  $payload
+     * @return array{response: Response, model: string}
+     */
+    private function postWithFailoverAndRetry(array $models, string $method, array $payload, string $key, bool $stream): array
     {
-        $response = null;
-        for ($attempt = 1; $attempt <= 2; $attempt++) {
-            $request = Http::withHeaders(['x-goog-api-key' => $key])
-                ->timeout(30)
-                ->connectTimeout(10)
-                ->acceptJson();
-            if ($stream) {
-                $request = $request->withOptions(['stream' => true]);
-            }
-            $response = $request->post($url, $payload);
+        $rateLimitRetries = 0;
+        $serverRetries = 0;
+        $rateLimitDelayMs = max(0, (int) config('services.gemini.rate_limit_retry_delay_ms', 3000));
+        $lastResponse = null;
+        $lastModel = $models[0] ?? 'gemini-flash-latest';
+        $lastException = null;
 
-            if (! in_array($response->status(), [429, 500, 502, 503, 504], true) || $attempt === 2) {
-                break;
+        while (true) {
+            $sawRateLimit = false;
+            $sawTransientServerError = false;
+
+            foreach ($models as $index => $candidateModel) {
+                $lastModel = $candidateModel;
+                $url = $this->endpoint($candidateModel, $method).($stream ? '?alt=sse' : '');
+
+                try {
+                    $request = Http::withHeaders(['x-goog-api-key' => $key])
+                        ->timeout(30)
+                        ->connectTimeout(10)
+                        ->acceptJson();
+                    if ($stream) {
+                        $request = $request->withOptions(['stream' => true]);
+                    }
+                    $response = $request->post($url, $payload);
+                    $lastResponse = $response;
+                    $lastException = null;
+                } catch (ConnectionException $exception) {
+                    $lastException = $exception;
+                    $lastResponse = null;
+                    $sawTransientServerError = true;
+                    Log::warning('Zaakiy Gemini API connection timeout/error.', [
+                        'model' => $candidateModel,
+                        'message' => $exception->getMessage(),
+                        'has_fallback' => $index < count($models) - 1,
+                    ]);
+
+                    continue;
+                }
+
+                if ($response->successful()) {
+                    return ['response' => $response, 'model' => $candidateModel];
+                }
+
+                $status = $response->status();
+                if ($status === 429) {
+                    $sawRateLimit = true;
+                } elseif (in_array($status, [500, 502, 503, 504], true)) {
+                    $sawTransientServerError = true;
+                }
+
+                // Fail over to the next configured fallback model on rate-limit, unavailable, or missing model errors.
+                if (in_array($status, [404, 429, 500, 502, 503, 504], true) && $index < count($models) - 1) {
+                    Log::info('Zaakiy Gemini API failing over to fallback model.', [
+                        'failed_model' => $candidateModel,
+                        'next_model' => $models[$index + 1],
+                        'status' => $status,
+                    ]);
+
+                    continue;
+                }
+
+                // Non-retryable client error (e.g., 400/401/403): stop immediately.
+                if (! in_array($status, [429, 500, 502, 503, 504], true)) {
+                    break 2;
+                }
             }
-            usleep($attempt * 400_000);
+
+            if ($sawRateLimit && $rateLimitRetries < 3) {
+                $rateLimitRetries++;
+                Log::info('Zaakiy Gemini API rate limited (429); retrying.', [
+                    'models' => $models,
+                    'retry' => $rateLimitRetries,
+                    'delay_ms' => $rateLimitDelayMs,
+                ]);
+                if ($rateLimitDelayMs > 0) {
+                    usleep($rateLimitDelayMs * 1000);
+                }
+
+                continue;
+            }
+
+            if ($sawTransientServerError && $serverRetries < 1) {
+                $serverRetries++;
+                usleep(400_000);
+
+                continue;
+            }
+
+            break;
         }
 
-        if ($response === null) {
+        if ($lastResponse === null) {
+            if ($lastException !== null) {
+                throw new RuntimeException('Zaakiy is temporarily unavailable. Please try again shortly.', 0, $lastException);
+            }
+
             throw new RuntimeException('Zaakiy is temporarily unavailable. Please try again shortly.');
         }
 
-        if ($response->failed()) {
-            $message = $response->status() === 429
-                ? 'Zaakiy is temporarily unavailable because the AI service rate limit was reached.'
-                : 'Zaakiy is temporarily unavailable. Please try again shortly.';
+        Log::warning('Zaakiy Gemini API request failed.', [
+            'model' => $lastModel,
+            'status' => $lastResponse->status(),
+            'body' => substr((string) $lastResponse->body(), 0, 500),
+        ]);
 
-            throw new RuntimeException($message);
+        if ($lastResponse->status() === 429) {
+            throw new RuntimeException(
+                'Zaakiy is currently busy due to AI rate limits. Please try again in a moment.',
+                429,
+            );
         }
 
-        return $response;
+        throw new RuntimeException('Zaakiy is temporarily unavailable. Please try again shortly.');
+    }
+
+    /** @return array<int, string> */
+    private function candidateModels(?string $model): array
+    {
+        $primary = $this->resolveModel($model);
+        $fallbacks = config('services.gemini.fallback_models', []);
+        if (is_string($fallbacks)) {
+            $fallbacks = array_map('trim', explode(',', $fallbacks));
+        }
+
+        $models = [$primary];
+        foreach ((array) $fallbacks as $fallback) {
+            if (is_string($fallback)) {
+                $trimmed = trim($fallback);
+                if ($trimmed !== '' && ! in_array($trimmed, $models, true)) {
+                    $models[] = $trimmed;
+                }
+            }
+        }
+
+        return $models;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $contents
+     * @return array<int, array<string, mixed>>
+     */
+    private function normalizeContents(array $contents): array
+    {
+        return array_map(fn (array $content): array => $this->normalizeContent($content), $contents);
+    }
+
+    /**
+     * Ensure protobuf Struct fields (functionCall.args and functionResponse.response)
+     * serialize as JSON objects ({}) rather than empty JSON arrays ([]).
+     *
+     * @param  array<string, mixed>  $content
+     * @return array<string, mixed>
+     */
+    private function normalizeContent(array $content): array
+    {
+        if (! is_array($content['parts'] ?? null)) {
+            return $content;
+        }
+
+        foreach ($content['parts'] as $index => $part) {
+            if (! is_array($part)) {
+                continue;
+            }
+            if (is_array($part['functionCall'] ?? null)) {
+                $args = $part['functionCall']['args'] ?? [];
+                if ($args === [] || $args === null) {
+                    $part['functionCall']['args'] = new stdClass;
+                }
+            }
+            if (is_array($part['functionResponse'] ?? null)) {
+                $resp = $part['functionResponse']['response'] ?? [];
+                if ($resp === [] || $resp === null) {
+                    $part['functionResponse']['response'] = new stdClass;
+                }
+            }
+            $content['parts'][$index] = $part;
+        }
+
+        return $content;
     }
 
     private function apiKey(): string

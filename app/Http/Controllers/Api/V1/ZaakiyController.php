@@ -9,6 +9,7 @@ use App\Services\Zaakiy\ZaakiyPresentationBuilder;
 use App\Services\ZaakiyContextService;
 use App\Services\ZaakiyService;
 use App\Support\Branch\BranchContext;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -78,7 +79,10 @@ class ZaakiyController extends Controller
                 $emit('done', ['context' => $verifiedContext['conversation_context'] ?? null]);
             } catch (Throwable $exception) {
                 report($exception);
-                $emit('error', ['message' => 'Zaakiy is temporarily unavailable. Please try again shortly.']);
+                $errorMessage = $exception instanceof RuntimeException && $exception->getCode() === 429
+                    ? $exception->getMessage()
+                    : 'Zaakiy is temporarily unavailable. Please try again shortly.';
+                $emit('error', ['message' => $errorMessage]);
             }
         }, 200, [
             'Content-Type' => 'text/event-stream',

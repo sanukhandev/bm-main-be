@@ -68,9 +68,9 @@ return new class extends Migration
             $table->string('required_permission', 64);
             $table->string('idempotency_key', 100);
             $table->string('status', 24)->default('pending');
-            $table->timestamp('expires_at');
-            $table->timestamp('confirmed_at')->nullable();
-            $table->timestamp('rejected_at')->nullable();
+            $table->dateTime('expires_at');
+            $table->dateTime('confirmed_at')->nullable();
+            $table->dateTime('rejected_at')->nullable();
             $table->string('result_entity_type', 64)->nullable();
             $table->unsignedBigInteger('result_entity_id')->nullable();
             $table->string('error_message', 500)->nullable();

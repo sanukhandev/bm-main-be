@@ -90,7 +90,7 @@ class ZaakiyActionProposalHitlTest extends TestCase
         $this->assertSame('pending', $proposal->status);
         $this->assertSame($this->branchA, (int) $proposal->branch_id);
         $this->assertNotNull($proposal->message_id);
-        $this->assertTrue($proposal->expires_at->isFuture());
+        $this->assertTrue($proposal->expires_at->gt(now()->addMinutes(10)));
 
         // Forbidden destructive agreement lifecycle actions are strictly rejected.
         $branchContext = new BranchContext;
