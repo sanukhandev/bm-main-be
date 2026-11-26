@@ -27,7 +27,7 @@ class PostAdditionalAgreementPayment
             }
 
             $lockedLine = AgreementAdditionalPayment::query()->where('branch_id', $branch->id)->where('id', $line->id)->lockForUpdate()->firstOrFail();
-            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first())) {
+            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->lockForUpdate()->first())) {
                 if ($existing->source_type !== "{$type}_agreement_additional_payment" || $existing->source_id !== $lockedLine->id) {
                     throw new ApiException('IDEMPOTENCY_KEY_CONFLICT', 'This idempotency key was used for a different payment.', 409);
                 }

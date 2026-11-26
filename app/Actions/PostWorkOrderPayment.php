@@ -26,7 +26,7 @@ class PostWorkOrderPayment
                 return $existing->load('party');
             }
             $line = WorkOrderPayment::query()->where('branch_id', $branch->id)->where('id', $payment->id)->lockForUpdate()->firstOrFail();
-            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first())) {
+            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->lockForUpdate()->first())) {
                 if ($existing->source_type !== 'work_order_payment' || $existing->source_id !== $line->id) {
                     throw new ApiException('IDEMPOTENCY_KEY_CONFLICT', 'This idempotency key was used for a different payment.', 409);
                 }

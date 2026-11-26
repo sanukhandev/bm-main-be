@@ -33,7 +33,7 @@ class PostAgreementPayment
 
             $agreementTable = $type === 'owner' ? 'owner_agreements' : 'tenant_agreements';
             $agreement = DB::table($agreementTable)->where('branch_id', $branch->id)->where('id', $agreementId)->lockForUpdate()->first();
-            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first())) {
+            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->lockForUpdate()->first())) {
                 if ($existing->source_type !== "{$type}_agreement" || $existing->source_id !== $agreementId) {
                     throw new ApiException('IDEMPOTENCY_KEY_CONFLICT', 'This idempotency key was used for a different payment.', 409);
                 }

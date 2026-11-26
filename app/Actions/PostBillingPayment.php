@@ -28,7 +28,7 @@ class PostBillingPayment
                 return $existing;
             }
             $line = $payment::query()->where('branch_id', $branch->id)->whereKey($payment->id)->lockForUpdate()->firstOrFail();
-            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first())) {
+            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->lockForUpdate()->first())) {
                 $expectedSource = $line instanceof QuotationPayment ? 'quotation_payment' : 'invoice_payment';
                 if ($existing->source_type !== $expectedSource || $existing->source_id !== $line->id) {
                     throw new ApiException('IDEMPOTENCY_KEY_CONFLICT', 'This idempotency key was used for a different payment.', 409);
