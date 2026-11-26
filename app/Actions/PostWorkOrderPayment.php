@@ -19,14 +19,25 @@ class PostWorkOrderPayment
     {
         return DB::transaction(function () use ($payment, $branch, $userId, $idempotencyKey) {
             if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first())) {
+                if ($existing->source_type !== 'work_order_payment' || $existing->source_id !== $payment->id) {
+                    throw new ApiException('IDEMPOTENCY_KEY_CONFLICT', 'This idempotency key was used for a different payment.', 409);
+                }
+
                 return $existing->load('party');
             }
             $line = WorkOrderPayment::query()->where('branch_id', $branch->id)->where('id', $payment->id)->lockForUpdate()->firstOrFail();
+            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first())) {
+                if ($existing->source_type !== 'work_order_payment' || $existing->source_id !== $line->id) {
+                    throw new ApiException('IDEMPOTENCY_KEY_CONFLICT', 'This idempotency key was used for a different payment.', 409);
+                }
+
+                return $existing->load('party');
+            }
             if ($line->status === 'paid') {
                 throw new ApiException('PAYMENT_ALREADY_POSTED', 'This work-order payment has already been posted.', 422);
             }
             $details = PaymentModeDetails::normalize(['payment_mode' => $line->payment_mode, 'remarks' => $line->particulars, 'cheque_no' => $line->cheque_no, 'cheque_date' => $line->cheque_date, 'bank_name' => $line->bank_name, 'bank_reference' => $line->bank_reference, 'transfer_date' => $line->transfer_date]);
-            $transaction = AccountTransaction::query()->create([
+            $transaction = AccountTransaction::query()->forceCreate([
                 'branch_id' => $branch->id,
                 'document_no' => $this->numbers->next($branch, $line->direction === 'inward' ? 'INWARD_RECEIPT' : 'OUTWARD_RECEIPT', (int) now($branch->timezone)->format('Y')),
                 'direction' => $line->direction,

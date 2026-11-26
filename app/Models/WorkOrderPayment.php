@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Model;
 
 class WorkOrderPayment extends Model
 {
+    use BelongsToBranch;
+
     protected $fillable = ['branch_id', 'work_order_id', 'direction', 'category', 'particulars', 'amount', 'due_date', 'payment_mode', 'cheque_no', 'cheque_date', 'bank_name', 'bank_reference', 'transfer_date', 'status', 'terms', 'created_by'];
 
     protected function casts(): array
@@ -15,7 +18,7 @@ class WorkOrderPayment extends Model
 
     public function accountTransaction()
     {
-        return $this->hasOne(AccountTransaction::class, 'source_id')->where('source_type', 'work_order_payment');
+        return $this->hasOne(AccountTransaction::class, 'source_id')->where('branch_id', $this->branch_id)->where('status', 'posted')->where('source_type', 'work_order_payment')->latest('id');
     }
 
     public function workOrder()

@@ -50,12 +50,19 @@ class User extends Authenticatable
 
     public function hasPermission(string $permission, ?int $branchId = null): bool
     {
+        if (! $this->isActive()) {
+            return false;
+        }
         if ($this->isSuperAdmin()) {
             return true;
         }
 
+        if (! $branchId || ! $this->belongsToBranch($branchId) || ! Branch::query()->whereKey($branchId)->where('status', 'active')->exists()) {
+            return false;
+        }
+
         $roleIds = DB::table('user_global_roles')->where('user_id', $this->getKey())->pluck('role_id')
-            ->merge($branchId ? DB::table('branch_user_roles')->where('user_id', $this->getKey())->where('branch_id', $branchId)->pluck('role_id') : [])
+            ->merge(DB::table('branch_user_roles')->where('user_id', $this->getKey())->where('branch_id', $branchId)->pluck('role_id'))
             ->unique();
 
         return DB::table('role_permissions')->join('permissions', 'permissions.id', '=', 'role_permissions.permission_id')

@@ -16,17 +16,20 @@ final class TrendEngine
     {
         $from = CarbonImmutable::parse($range['from'], config('app.timezone'))->startOfDay();
         $to = CarbonImmutable::parse($range['to'], config('app.timezone'))->startOfDay();
+        if ($to->lt($from) || $from->diffInDays($to) > ($maxPoints * 95)) {
+            return ['granularity' => $requested, 'periods' => [], 'warnings' => [['code' => 'TREND_RANGE_TOO_LARGE']]];
+        }
         $granularity = $requested === 'auto' ? $this->defaultGranularity($from, $to) : $requested;
         if (! in_array($granularity, ['day', 'week', 'month', 'quarter'], true)) {
             return ['granularity' => $granularity, 'periods' => [], 'warnings' => [['code' => 'TREND_GRANULARITY_UNSUPPORTED']]];
         }
-        $periods = $this->makePeriods($from, $to, $granularity);
+        $periods = $this->makePeriods($from, $to, $granularity, $maxPoints);
         if (count($periods) > $maxPoints && $requested === 'auto') {
             foreach (['week', 'month', 'quarter'] as $coarser) {
                 if ($this->rank($coarser) <= $this->rank($granularity)) {
                     continue;
                 }
-                $periods = $this->makePeriods($from, $to, $coarser);
+                $periods = $this->makePeriods($from, $to, $coarser, $maxPoints);
                 if (count($periods) <= $maxPoints) {
                     $granularity = $coarser;
                     break;
@@ -66,7 +69,7 @@ final class TrendEngine
         return new ZaakiyMetricTrend($metric, $label, $unit, $granularity, $range, $points, $summary, $meta);
     }
 
-    private function makePeriods(CarbonImmutable $from, CarbonImmutable $to, string $granularity): array
+    private function makePeriods(CarbonImmutable $from, CarbonImmutable $to, string $granularity, int $maxPoints): array
     {
         $periods = [];
         $cursor = match ($granularity) {
@@ -87,6 +90,9 @@ final class TrendEngine
             $periods[] = ['from' => $start->toDateString(), 'to' => $end->toDateString(), 'label' => $cursor->format(match ($granularity) {
                 'day' => 'Y-m-d', 'week' => 'o-\WW', 'month' => 'M Y', 'quarter' => 'Y \QQ',
             })];
+            if (count($periods) > $maxPoints) {
+                break;
+            }
             $cursor = match ($granularity) {
                 'day' => $cursor->addDay(),
                 'week' => $cursor->addWeek(),

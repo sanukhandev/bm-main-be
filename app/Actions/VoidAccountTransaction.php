@@ -6,6 +6,7 @@ use App\Exceptions\ApiException;
 use App\Models\AccountTransaction;
 use App\Models\Branch;
 use App\Services\AuditService;
+use App\Support\Money;
 use Illuminate\Support\Facades\DB;
 
 class VoidAccountTransaction
@@ -30,19 +31,21 @@ class VoidAccountTransaction
                 $column = $allocation->tenant_agreement_installment_id ? 'tenant_agreement_installment_id' : 'owner_agreement_installment_id';
                 $installmentId = $allocation->{$column};
                 $installment = DB::table($table)->where('branch_id', $branch->id)->lockForUpdate()->find($installmentId);
-                $paid = $this->cents((string) $installment->paid_amount) - $this->cents((string) $allocation->amount);
+                $paid = Money::toCents((string) $installment->paid_amount) - Money::toCents((string) $allocation->amount);
                 if ($paid < 0) {
                     throw new ApiException('PAYMENT_ALLOCATION_INVALID', 'The posted allocation cannot be reversed safely.', 409);
                 }
                 DB::table($table)->where('id', $installmentId)->update([
-                    'paid_amount' => number_format($paid / 100, 2, '.', ''),
-                    'status' => $paid === 0 ? 'pending' : ($paid >= $this->cents((string) $installment->amount) ? 'paid' : 'partially_paid'),
+                    'paid_amount' => Money::formatCents($paid),
+                    'status' => $paid === 0 ? 'pending' : ($paid >= Money::toCents((string) $installment->amount) ? 'paid' : 'partially_paid'),
                     'updated_at' => now(),
                 ]);
             }
 
             $sourceTables = [
                 'agreement_additional_payment' => ['agreement_additional_payments', 'id'],
+                'owner_agreement_additional_payment' => ['agreement_additional_payments', 'id'],
+                'tenant_agreement_additional_payment' => ['agreement_additional_payments', 'id'],
                 'work_order_payment' => ['work_order_payments', 'id'],
                 'invoice_payment' => ['invoice_payments', 'id'],
                 'quotation_payment' => ['quotation_payments', 'id'],

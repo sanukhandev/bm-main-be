@@ -18,6 +18,9 @@ class IntelligentReportService
         if ($scope === 'overall' && ! $overall) {
             abort(403, 'Overall Business scope requires Super Admin access.');
         }
+        if (! $overall && ! $user->hasPermission('accounts.view', $context->id())) {
+            abort(403, 'Financial report access requires accounts.view.');
+        }
         $branchIds = $overall ? DB::table('branches')->where('status', 'active')->pluck('id')->all() : [$context->id()];
         $transactions = $this->transactions($branchIds, $period);
         $summary = $this->summary($branchIds, $period, $transactions);

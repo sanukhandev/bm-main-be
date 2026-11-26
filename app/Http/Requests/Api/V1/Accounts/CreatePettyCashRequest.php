@@ -16,7 +16,7 @@ class CreatePettyCashRequest extends FormRequest
         return [
             'transaction_date' => ['required', 'date_format:Y-m-d'],
             'direction' => ['required', 'in:inward,outward'],
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'decimal:0,2'],
             'particulars' => ['required', 'string', 'max:255'],
             'category' => ['nullable', 'string', 'max:100'],
             'reference' => ['nullable', 'string', 'max:255'],

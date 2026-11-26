@@ -15,7 +15,7 @@ class PropertyPolicy
 
     public function create(User $user): bool
     {
-        return $user->isActive() && app(BranchContext::class)->isResolved();
+        return $user->isActive() && app(BranchContext::class)->isResolved() && $user->hasPermission('properties.manage', app(BranchContext::class)->id());
     }
 
     public function view(User $user, Property $property): bool
@@ -25,12 +25,12 @@ class PropertyPolicy
 
     public function update(User $user, Property $property): bool
     {
-        return $user->isActive() && $this->matchesBranch($property);
+        return $user->isActive() && $this->matchesBranch($property) && $user->hasPermission('properties.manage', (int) $property->branch_id);
     }
 
     public function delete(User $user, Property $property): bool
     {
-        return $user->isActive() && $this->matchesBranch($property);
+        return $user->isActive() && $this->matchesBranch($property) && $user->hasPermission('properties.manage', (int) $property->branch_id);
     }
 
     private function matchesBranch(Property $property): bool

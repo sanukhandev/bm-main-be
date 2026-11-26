@@ -26,12 +26,17 @@ class UserResource extends JsonResource
 
     private function permissions(): array
     {
+        if (! $this->isActive()) {
+            return [];
+        }
         if ($this->isSuperAdmin()) {
             return \DB::table('permissions')->orderBy('key')->pluck('key')->values()->all();
         }
 
         $roleIds = \DB::table('user_global_roles')->where('user_id', $this->id)->pluck('role_id')
-            ->merge(\DB::table('branch_user_roles')->where('user_id', $this->id)->pluck('role_id'));
+            ->merge(\DB::table('branch_user_roles')->join('branch_user', function ($join) {
+                $join->on('branch_user.branch_id', '=', 'branch_user_roles.branch_id')->on('branch_user.user_id', '=', 'branch_user_roles.user_id');
+            })->join('branches', 'branches.id', '=', 'branch_user.branch_id')->where('branch_user_roles.user_id', $this->id)->where('branch_user.status', 'active')->where('branches.status', 'active')->distinct()->pluck('branch_user_roles.role_id'));
 
         return \DB::table('role_permissions')->whereIn('role_permissions.role_id', $roleIds)
             ->join('permissions', 'permissions.id', '=', 'role_permissions.permission_id')

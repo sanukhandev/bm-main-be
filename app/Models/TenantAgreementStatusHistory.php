@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Model;
 
 class TenantAgreementStatusHistory extends Model
 {
+    use BelongsToBranch;
+
     protected $table = 'tenant_agreement_status_history';
 
     public $timestamps = false;

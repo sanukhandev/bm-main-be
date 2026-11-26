@@ -74,6 +74,22 @@ class ReportsController extends Controller
 
     private function validateFilters(Request $request, array $extra = []): void
     {
-        $request->validate($extra + ['date_from' => 'nullable|date', 'date_to' => 'nullable|date|after_or_equal:date_from', 'per_page' => 'nullable|integer|min:1|max:100']);
+        $request->validate($extra + [
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+            'per_page' => 'nullable|integer|min:1|max:100',
+            'status' => 'nullable|string|max:30',
+            'search' => 'nullable|string|max:100',
+            'direction' => 'nullable|in:inward,outward',
+            'payment_mode' => 'nullable|in:cash,cheque,bank_transfer',
+            'cheque_status' => 'nullable|string|max:30',
+            'source_type' => 'nullable|string|max:80',
+            'customer_id' => 'nullable|integer|min:1',
+            'owner_id' => 'nullable|integer|min:1',
+            'tenant_id' => 'nullable|integer|min:1',
+            'property_id' => 'nullable|integer|min:1',
+            'agreement_id' => 'nullable|integer|min:1',
+            'overdue_only' => 'nullable|boolean',
+        ]);
     }
 }

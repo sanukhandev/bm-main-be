@@ -21,6 +21,6 @@ class AuditSkill implements ZaakiySkill
             return ['skill' => 'audit', 'data' => ['restricted' => true]];
         }
 
-        return ['skill' => 'audit', 'data' => ['available' => true, 'entries' => DB::table('audit_logs')->where('branch_id', $branchId)->count()], 'navigation' => ['label' => 'Open Audit Trail', 'url' => '/app/administration/audit']];
+        return ['skill' => 'audit', 'data' => ['available' => true, 'entries' => DB::table('audit_logs')->where('branch_id', $branchId)->where('action', 'not like', 'activity.%')->count()], 'navigation' => ['label' => 'Open Audit Trail', 'url' => '/app/administration/audit']];
     }
 }

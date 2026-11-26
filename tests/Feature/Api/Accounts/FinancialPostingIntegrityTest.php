@@ -124,7 +124,7 @@ class FinancialPostingIntegrityTest extends TestCase
 
     public function test_posted_transaction_cannot_be_updated_or_deleted(): void
     {
-        $posted = AccountTransaction::query()->create([
+        $posted = AccountTransaction::query()->forceCreate([
             'branch_id' => $this->branchA, 'document_no' => 'E2E-A-IR-2026-000001', 'direction' => 'inward', 'transaction_date' => '2026-09-23',
             'payment_mode' => 'cash', 'amount' => '10.00', 'source_type' => 'manual', 'status' => 'posted', 'created_by' => $this->apiUser->id,
             'posted_by' => $this->apiUser->id, 'posted_at' => now(),
@@ -155,7 +155,7 @@ class FinancialPostingIntegrityTest extends TestCase
 
     public function test_same_branch_user_without_accounts_void_cannot_void(): void
     {
-        $posted = AccountTransaction::query()->create([
+        $posted = AccountTransaction::query()->forceCreate([
             'branch_id' => $this->branchA, 'document_no' => 'VOID-TEST-001', 'direction' => 'inward', 'transaction_date' => '2026-09-23', 'payment_mode' => 'cash', 'amount' => '10.00', 'source_type' => 'manual', 'status' => 'posted', 'created_by' => $this->apiUser->id, 'posted_by' => $this->apiUser->id, 'posted_at' => now(),
         ]);
         DB::table('role_permissions')->where('role_id', DB::table('roles')->where('key', 'branch_admin')->value('id'))->where('permission_id', DB::table('permissions')->where('key', 'accounts.void')->value('id'))->delete();

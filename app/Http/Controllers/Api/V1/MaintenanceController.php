@@ -27,6 +27,7 @@ use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use App\Services\PaymentModeDetails;
 use App\Support\Branch\BranchContext;
+use App\Support\SqlLike;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -34,13 +35,14 @@ class MaintenanceController extends Controller
 {
     public function vendors(Request $request, BranchContext $context)
     {
+        $request->validate(['search' => 'nullable|string|max:100']);
         $query = Customer::query()->forBranch($context->id())->with('businessRoles')->whereHas('businessRoles', fn ($roles) => $roles->where('role', 'vendor'))
             ->when($request->query('search'), function ($q, $value) {
                 $phoneSearch = preg_replace('/\D+/', '', $value) ?? '';
                 $q->where(function ($search) use ($value, $phoneSearch) {
-                    $search->where('display_name', 'like', "%{$value}%")
-                        ->orWhere('phone', 'like', "%{$value}%")
-                        ->orWhere('email', 'like', "%{$value}%");
+                    $search->whereRaw("display_name LIKE ? ESCAPE '!'", [SqlLike::contains($value)])
+                        ->orWhereRaw("phone LIKE ? ESCAPE '!'", [SqlLike::contains($value)])
+                        ->orWhereRaw("email LIKE ? ESCAPE '!'", [SqlLike::contains($value)]);
                     if ($phoneSearch !== '') {
                         $search->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(phone_numbers_json, ''), ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ?", ["%{$phoneSearch}%"]);
                     }
@@ -95,7 +97,8 @@ class MaintenanceController extends Controller
 
     public function inventory(Request $request, BranchContext $context)
     {
-        $query = InventoryItem::query()->forBranch($context->id())->select('inventory_items.*')->selectSub(DB::table('stock_movements')->selectRaw('COALESCE(SUM(quantity), 0)')->whereColumn('inventory_item_id', 'inventory_items.id')->where('branch_id', $context->id()), 'stock_on_hand')->when($request->query('search'), fn ($q, $v) => $q->where(fn ($x) => $x->where('name', 'like', "%{$v}%")->orWhere('sku', 'like', "%{$v}%")))->latest();
+        $request->validate(['search' => 'nullable|string|max:100']);
+        $query = InventoryItem::query()->forBranch($context->id())->select('inventory_items.*')->selectSub(DB::table('stock_movements')->selectRaw('COALESCE(SUM(quantity), 0)')->whereColumn('inventory_item_id', 'inventory_items.id')->where('branch_id', $context->id()), 'stock_on_hand')->when($request->query('search'), fn ($q, $v) => $q->where(fn ($x) => $x->whereRaw("name LIKE ? ESCAPE '!'", [SqlLike::contains($v)])->orWhereRaw("sku LIKE ? ESCAPE '!'", [SqlLike::contains($v)])))->latest();
 
         return InventoryItemResource::collection($query->paginate(25));
     }
@@ -134,7 +137,8 @@ class MaintenanceController extends Controller
 
     public function workOrders(Request $request, BranchContext $context)
     {
-        $query = WorkOrder::query()->forBranch($context->id())->with(['property', 'vendor'])->when($request->query('status'), fn ($q, $v) => $q->where('status', $v))->when($request->query('search'), fn ($q, $v) => $q->where(fn ($x) => $x->where('work_order_no', 'like', "%{$v}%")->orWhere('title', 'like', "%{$v}%")))->latest();
+        $request->validate(['status' => 'nullable|string|max:30', 'search' => 'nullable|string|max:100']);
+        $query = WorkOrder::query()->forBranch($context->id())->with(['property', 'vendor'])->when($request->query('status'), fn ($q, $v) => $q->where('status', $v))->when($request->query('search'), fn ($q, $v) => $q->where(fn ($x) => $x->whereRaw("work_order_no LIKE ? ESCAPE '!'", [SqlLike::contains($v)])->orWhereRaw("title LIKE ? ESCAPE '!'", [SqlLike::contains($v)])))->latest();
 
         return WorkOrderResource::collection($query->paginate(25));
     }

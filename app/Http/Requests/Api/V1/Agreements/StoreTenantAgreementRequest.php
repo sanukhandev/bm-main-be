@@ -29,7 +29,7 @@ class StoreTenantAgreementRequest extends FormRequest
             'properties.*.source_owner_agreement_id' => ['required', 'integer', Rule::exists('owner_agreements', 'id')->where(fn ($query) => $query->where('branch_id', $branchId))],
             'start_date' => ['required', 'date_format:Y-m-d'],
             'end_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:start_date'],
-            'total_amount' => ['required', 'numeric', 'min:0'],
+            'total_amount' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
             'currency_code' => ['required', 'string', 'size:3'],
             'payment_count' => ['required', 'integer', 'min:1'],
             'payment_frequency' => ['nullable', 'string', 'max:30'],

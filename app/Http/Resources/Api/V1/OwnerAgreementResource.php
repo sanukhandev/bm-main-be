@@ -10,6 +10,8 @@ class OwnerAgreementResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $financial = $request->user()?->hasPermission('accounts.view', (int) $this->branch_id) ?? false;
+
         return [
             'id' => $this->id,
             'branch_id' => $this->branch_id,
@@ -18,7 +20,7 @@ class OwnerAgreementResource extends JsonResource
             'owner_customer_id' => $this->owner_customer_id,
             'owner' => new CustomerResource($this->whenLoaded('owner')),
             'properties' => PropertyResource::collection($this->whenLoaded('properties')),
-            'installments' => $this->whenLoaded('installments', function () {
+            'installments' => $this->when($financial, fn () => $this->whenLoaded('installments', function () {
                 $rows = $this->installments->map(function ($installment) {
                     $category = $installment->category ?: 'rent';
                     $particulars = $installment->particulars ?: $installment->notes ?: 'Installment '.$installment->installment_no.' payment';
@@ -43,12 +45,12 @@ class OwnerAgreementResource extends JsonResource
                         ];
                     }))->values()
                     : $rows;
-            }),
+            })),
             'disputes' => $this->whenLoaded('disputes'),
-            'additional_payments' => $this->whenLoaded('additionalPayments'),
+            'additional_payments' => $this->when($financial, $this->whenLoaded('additionalPayments')),
             'start_date' => $this->start_date?->format('Y-m-d'),
             'end_date' => $this->end_date?->format('Y-m-d'),
-            'total_amount' => $this->total_amount,
+            'total_amount' => $this->when($financial, $this->total_amount),
             'currency_code' => $this->currency_code,
             'payment_count' => $this->payment_count,
             'payment_frequency' => $this->payment_frequency,

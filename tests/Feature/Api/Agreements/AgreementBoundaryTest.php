@@ -137,6 +137,9 @@ class AgreementBoundaryTest extends TestCase
             ->assertJsonPath('data.installments.1.amount', '7000.00')
             ->json('data');
 
+        $this->branchRequest()->patchJson('/api/v1/owner-agreements/'.$owner['id'], ['total_amount' => '13000.00'])
+            ->assertUnprocessable()->assertJsonValidationErrors(['installments']);
+
         $this->branchRequest()->patchJson('/api/v1/owner-agreements/'.$owner['id'], [
             'installments' => [
                 ['installment_no' => 1, 'due_date' => '2026-02-15', 'amount' => '4000.00', 'category' => 'rent', 'particulars' => 'February payment'],

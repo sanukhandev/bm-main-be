@@ -151,6 +151,13 @@ class AgreementLifecycleTest extends TestCase
             'start_date' => '2020-01-01', 'end_date' => '2100-12-31', 'total_amount' => '1000.00', 'currency_code' => 'AED',
             'payment_count' => 1, 'payment_mode' => 'cash', 'status' => 'approved', 'lock_version' => 1, 'created_at' => now(), 'updated_at' => now(),
         ]);
+        DB::table('owner_agreement_installments')->insert([
+            'branch_id' => $this->branchA, 'owner_agreement_id' => $id, 'installment_no' => 1, 'due_date' => '2020-01-01',
+            'amount' => '1000.00', 'paid_amount' => '0.00', 'payment_mode' => 'cash', 'status' => 'pending', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('owner_agreement_properties')->insert([
+            'branch_id' => $this->branchA, 'owner_agreement_id' => $id, 'property_id' => $this->propertyId, 'owner_customer_id' => $this->customerA, 'created_at' => now(), 'updated_at' => now(),
+        ]);
 
         $this->artisan('agreements:process-lifecycle')->assertSuccessful();
         $this->assertDatabaseHas('owner_agreements', ['id' => $id, 'status' => 'commenced']);

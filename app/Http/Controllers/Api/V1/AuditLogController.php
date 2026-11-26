@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\AuditLogResource;
 use App\Models\AuditLog;
 use App\Support\Branch\BranchContext;
+use App\Support\SqlLike;
 use Illuminate\Http\Request;
 
 class AuditLogController extends Controller
@@ -33,8 +34,8 @@ class AuditLogController extends Controller
             ->when($request->query('entity_id'), fn ($q, $v) => $q->where('entity_id', $v))
             ->when($request->query('search'), function ($q, $v) {
                 $q->where(function ($inner) use ($v) {
-                    $inner->where('action', 'like', "%{$v}%")->orWhere('entity_type', 'like', "%{$v}%")
-                        ->orWhereHas('actor', fn ($actor) => $actor->where('name', 'like', "%{$v}%")->orWhere('email', 'like', "%{$v}%"));
+                    $inner->whereRaw("action LIKE ? ESCAPE '!'", [SqlLike::contains($v)])->orWhereRaw("entity_type LIKE ? ESCAPE '!'", [SqlLike::contains($v)])
+                        ->orWhereHas('actor', fn ($actor) => $actor->whereRaw("name LIKE ? ESCAPE '!'", [SqlLike::contains($v)])->orWhereRaw("email LIKE ? ESCAPE '!'", [SqlLike::contains($v)]));
                 });
             })->latest('created_at')->latest('id');
 

@@ -13,6 +13,9 @@ class IntelligentReportPdfService
     {
         $options = new Options;
         $options->setIsRemoteEnabled(false);
+        $options->setIsPhpEnabled(false);
+        $options->setAllowedProtocols([]);
+        $options->setChroot(public_path());
         $options->setDefaultFont('DejaVu Sans');
         $dompdf = new Dompdf($options);
         $dompdf->loadHtml($this->html($report, $user));

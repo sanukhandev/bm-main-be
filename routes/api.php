@@ -50,11 +50,11 @@ Route::prefix('v1')->group(function () {
     });
 
     Route::middleware(['api.json', 'auth:sanctum', 'user.active', 'branch.context', 'throttle:api'])->group(function () {
-        Route::post('/customers/identity-extract', [CustomerController::class, 'extractIdentity']);
+        Route::post('/customers/identity-extract', [CustomerController::class, 'extractIdentity'])->middleware('throttle:identity-extract');
         Route::get('/customers/{customer}/profile', [CustomerController::class, 'profile']);
         Route::get('/dashboard/metrics', [DashboardController::class, 'metrics']);
         Route::get('/dashboard/operational', [DashboardController::class, 'operational']);
-        Route::post('/ai/zaakiy/chat', [ZaakiyController::class, 'chat'])->middleware('throttle:api');
+        Route::post('/ai/zaakiy/chat', [ZaakiyController::class, 'chat'])->middleware('throttle:ai');
         Route::get('/ai/zaakiy/threads', [ZaakiyThreadController::class, 'index']);
         Route::get('/ai/zaakiy/threads/{thread}', [ZaakiyThreadController::class, 'show']);
         Route::delete('/ai/zaakiy/threads/{thread}', [ZaakiyThreadController::class, 'destroy']);
@@ -73,7 +73,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/reports/daily-cash-movement', [ReportsController::class, 'dailyCashMovement'])->middleware('permission:accounts.view');
         Route::get('/reports/petty-cash', [ReportsController::class, 'pettyCash'])->middleware('permission:accounts.view');
         Route::get('/reports/intelligent', [IntelligentReportController::class, 'show'])->middleware('permission:accounts.view');
-        Route::get('/reports/intelligent/pdf', [IntelligentReportController::class, 'pdf'])->middleware('permission:accounts.view');
+        Route::get('/reports/intelligent/pdf', [IntelligentReportController::class, 'pdf'])->middleware(['permission:accounts.view', 'throttle:pdf']);
         Route::get('/accounts/dashboard', [AccountsController::class, 'dashboard'])->middleware('permission:accounts.view');
         Route::get('/accounts/inward', [AccountsController::class, 'inward'])->middleware('permission:accounts.view');
         Route::get('/accounts/outward', [AccountsController::class, 'outward'])->middleware('permission:accounts.view');
@@ -83,17 +83,17 @@ Route::prefix('v1')->group(function () {
         Route::post('/accounts/petty-cash', [AccountsController::class, 'pettyCash'])->middleware('permission:accounts.post');
         Route::post('/accounts/transactions/{transaction}/void', [AccountsController::class, 'void'])->middleware('permission:accounts.void');
         Route::post('/accounts/transactions/{transaction}/cheque/{action}', [AccountsController::class, 'chequeAction'])->where('action', 'deposit|clear|bounce|cancel')->middleware('permission:accounts.post');
-        Route::get('/quotations', [BillingController::class, 'quotations']);
+        Route::get('/quotations', [BillingController::class, 'quotations'])->middleware('permission:accounts.view');
         Route::post('/quotations', [BillingController::class, 'storeQuotation'])->middleware('permission:billing.manage');
-        Route::get('/quotations/{quotation}', [BillingController::class, 'quotation']);
+        Route::get('/quotations/{quotation}', [BillingController::class, 'quotation'])->middleware('permission:accounts.view');
         Route::patch('/quotations/{quotation}', [BillingController::class, 'updateQuotation'])->middleware('permission:billing.manage');
         Route::delete('/quotations/{quotation}', [BillingController::class, 'deleteQuotation'])->middleware('permission:billing.manage');
         Route::post('/quotations/{quotation}/convert-to-invoice', [BillingController::class, 'convertQuotation'])->middleware('permission:billing.manage');
         Route::post('/quotations/{quotation}/payments', [BillingController::class, 'addQuotationPayment'])->middleware('permission:accounts.post');
         Route::patch('/quotations/{quotation}/payments/{payment}/status', [BillingController::class, 'quotationPaymentStatus'])->middleware('permission:accounts.post');
-        Route::get('/invoices', [BillingController::class, 'invoices']);
+        Route::get('/invoices', [BillingController::class, 'invoices'])->middleware('permission:accounts.view');
         Route::post('/invoices', [BillingController::class, 'storeInvoice'])->middleware('permission:billing.manage');
-        Route::get('/invoices/{invoice}', [BillingController::class, 'invoice']);
+        Route::get('/invoices/{invoice}', [BillingController::class, 'invoice'])->middleware('permission:accounts.view');
         Route::patch('/invoices/{invoice}', [BillingController::class, 'updateInvoice'])->middleware('permission:billing.manage');
         Route::delete('/invoices/{invoice}', [BillingController::class, 'deleteInvoice'])->middleware('permission:billing.manage');
         Route::post('/invoices/{invoice}/payments', [BillingController::class, 'addInvoicePayment'])->middleware('permission:accounts.post');

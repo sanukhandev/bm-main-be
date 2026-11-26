@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\CreatePettyCashEntry;
 use App\Actions\VoidAccountTransaction;
 use App\Enums\ChequeStatus;
+use App\Enums\PostingStatus;
 use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Accounts\CreatePettyCashRequest;
@@ -145,27 +146,29 @@ class AccountsController extends Controller
 
     public function chequeAction(Request $request, int $transaction, string $action, BranchContext $context): AccountTransactionResource
     {
-        $target = match ($action) {
-            'deposit' => ChequeStatus::Deposited,
-            'clear' => ChequeStatus::Cleared,
-            'bounce' => ChequeStatus::Bounced,
-            'cancel' => ChequeStatus::Cancelled,
-            default => throw new ApiException('INVALID_CHEQUE_OPERATION', 'Unsupported cheque operation.', 422),
-        };
-        $record = AccountTransaction::query()->where('branch_id', $context->id())->lockForUpdate()->findOrFail($transaction);
-        if ($record->payment_mode?->value !== 'cheque' || ! $record->cheque_status) {
-            throw new ApiException('INVALID_CHEQUE_OPERATION', 'Only cheque transactions support cheque actions.', 422);
-        }
-        $current = $record->cheque_status instanceof ChequeStatus ? $record->cheque_status : ChequeStatus::from($record->cheque_status);
-        if (! in_array($target->value, $current->nextStatuses(), true)) {
-            throw new ApiException('INVALID_CHEQUE_STATUS_TRANSITION', 'This cheque status transition is not allowed.', 409);
-        }
-        $record->updateQuietly(['cheque_status' => $target->value, 'cheque_status_changed_at' => now(), 'cheque_status_changed_by' => $request->user()->getAuthIdentifier()]);
-        app(AuditService::class)->record('accounts.cheque_'.match ($target) {
-            ChequeStatus::Deposited => 'deposited', ChequeStatus::Cleared => 'cleared', ChequeStatus::Bounced => 'bounced', ChequeStatus::Cancelled => 'cancelled', default => 'changed'
-        }, $record, ['cheque_status' => $current->value], ['cheque_status' => $target->value], ['previous_cheque_status' => $current->value, 'new_cheque_status' => $target->value, 'cheque_no' => $record->cheque_no, 'transaction_id' => $record->id, 'document_number' => $record->document_no], $context->id(), $request->user()->getAuthIdentifier());
+        return DB::transaction(function () use ($request, $transaction, $action, $context): AccountTransactionResource {
+            $target = match ($action) {
+                'deposit' => ChequeStatus::Deposited,
+                'clear' => ChequeStatus::Cleared,
+                'bounce' => ChequeStatus::Bounced,
+                'cancel' => ChequeStatus::Cancelled,
+                default => throw new ApiException('INVALID_CHEQUE_OPERATION', 'Unsupported cheque operation.', 422),
+            };
+            $record = AccountTransaction::query()->where('branch_id', $context->id())->lockForUpdate()->findOrFail($transaction);
+            if ($record->status !== PostingStatus::Posted || $record->payment_mode?->value !== 'cheque' || ! $record->cheque_status) {
+                throw new ApiException('INVALID_CHEQUE_OPERATION', 'Only cheque transactions support cheque actions.', 422);
+            }
+            $current = $record->cheque_status instanceof ChequeStatus ? $record->cheque_status : ChequeStatus::from($record->cheque_status);
+            if (! in_array($target->value, $current->nextStatuses(), true)) {
+                throw new ApiException('INVALID_CHEQUE_STATUS_TRANSITION', 'This cheque status transition is not allowed.', 409);
+            }
+            $record->forceFill(['cheque_status' => $target->value, 'cheque_status_changed_at' => now(), 'cheque_status_changed_by' => $request->user()->getAuthIdentifier()])->saveQuietly();
+            app(AuditService::class)->record('accounts.cheque_'.match ($target) {
+                ChequeStatus::Deposited => 'deposited', ChequeStatus::Cleared => 'cleared', ChequeStatus::Bounced => 'bounced', ChequeStatus::Cancelled => 'cancelled', default => 'changed'
+            }, $record, ['cheque_status' => $current->value], ['cheque_status' => $target->value], ['previous_cheque_status' => $current->value, 'new_cheque_status' => $target->value, 'cheque_no' => $record->cheque_no, 'transaction_id' => $record->id, 'document_number' => $record->document_no], $context->id(), $request->user()->getAuthIdentifier());
 
-        return new AccountTransactionResource($record->refresh());
+            return new AccountTransactionResource($record->refresh());
+        });
     }
 
     private function pettyBalance(int $branchId): string

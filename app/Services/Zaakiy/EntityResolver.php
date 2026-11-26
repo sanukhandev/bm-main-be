@@ -213,15 +213,15 @@ class EntityResolver
                 continue;
             }
             $row = match ($type) {
-                'customer', 'owner' => DB::table('customers')->where('branch_id', $context->branchId())->whereKey($id)->whereNull('deleted_at')->first(['id', 'customer_code as label']),
-                'tenant', 'owner' => DB::table('customers')->where('branch_id', $context->branchId())->whereKey($id)->whereNull('deleted_at')->whereExists(fn ($query) => $query->selectRaw('1')->from('customer_role_assignments')->whereColumn('customer_role_assignments.customer_id', 'customers.id')->where('customer_role_assignments.branch_id', $context->branchId())->where('customer_role_assignments.role', $type))->first(['id', 'customer_code as label']),
-                'property' => DB::table('properties')->where('branch_id', $context->branchId())->whereKey($id)->first(['id', 'property_code as label']),
-                'owner_agreement' => DB::table('owner_agreements')->where('branch_id', $context->branchId())->whereKey($id)->first(['id', 'agreement_no as label']),
-                'tenant_agreement' => DB::table('tenant_agreements')->where('branch_id', $context->branchId())->whereKey($id)->first(['id', 'agreement_no as label']),
-                'work_order' => DB::table('work_orders')->where('branch_id', $context->branchId())->whereKey($id)->first(['id', 'work_order_no as label']),
-                'invoice' => DB::table('invoices')->where('branch_id', $context->branchId())->whereKey($id)->first(['id', 'invoice_no as label']),
-                'quotation' => DB::table('quotations')->where('branch_id', $context->branchId())->whereKey($id)->first(['id', 'quotation_no as label']),
-                'payment' => $context->can('accounts.view') ? DB::table('account_transactions')->where('branch_id', $context->branchId())->whereKey($id)->first(['id', 'document_no as label']) : null,
+                'customer' => DB::table('customers')->where('branch_id', $context->branchId())->where('id', $id)->whereNull('deleted_at')->first(['id', 'customer_code as label']),
+                'owner', 'tenant' => DB::table('customers')->where('branch_id', $context->branchId())->where('id', $id)->whereNull('deleted_at')->whereExists(fn ($query) => $query->selectRaw('1')->from('customer_role_assignments')->whereColumn('customer_role_assignments.customer_id', 'customers.id')->where('customer_role_assignments.branch_id', $context->branchId())->where('customer_role_assignments.role', $type))->first(['id', 'customer_code as label']),
+                'property' => DB::table('properties')->where('branch_id', $context->branchId())->where('id', $id)->whereNull('deleted_at')->first(['id', 'property_code as label']),
+                'owner_agreement' => DB::table('owner_agreements')->where('branch_id', $context->branchId())->where('id', $id)->whereNull('deleted_at')->first(['id', 'agreement_no as label']),
+                'tenant_agreement' => DB::table('tenant_agreements')->where('branch_id', $context->branchId())->where('id', $id)->whereNull('deleted_at')->first(['id', 'agreement_no as label']),
+                'work_order' => DB::table('work_orders')->where('branch_id', $context->branchId())->where('id', $id)->whereNull('deleted_at')->first(['id', 'work_order_no as label']),
+                'invoice' => DB::table('invoices')->where('branch_id', $context->branchId())->where('id', $id)->first(['id', 'invoice_no as label']),
+                'quotation' => DB::table('quotations')->where('branch_id', $context->branchId())->where('id', $id)->first(['id', 'quotation_no as label']),
+                'payment' => $context->can('accounts.view') ? DB::table('account_transactions')->where('branch_id', $context->branchId())->where('id', $id)->first(['id', 'document_no as label']) : null,
             };
             if ($row) {
                 $authorized[] = ['type' => $type, 'id' => (int) $row->id, 'label' => (string) $row->label];

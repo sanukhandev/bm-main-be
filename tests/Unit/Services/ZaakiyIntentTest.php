@@ -37,10 +37,11 @@ class ZaakiyIntentTest extends TestCase
         $clean = app(SensitiveDataFilter::class)->clean([
             'amount' => '100.00',
             'password' => 'hidden',
+            'representative' => ['emirates_id' => '784-1990-1234567-1', 'name' => 'Safe'],
             'metadata' => ['api_token' => 'hidden', 'label' => 'safe'],
         ]);
 
-        $this->assertSame(['amount' => '100.00', 'metadata' => ['label' => 'safe']], $clean);
+        $this->assertSame(['amount' => '100.00', 'representative' => ['name' => 'Safe'], 'metadata' => ['label' => 'safe']], $clean);
     }
 
     public function test_property_detail_question_selects_property_360(): void
@@ -173,7 +174,7 @@ class ZaakiyIntentTest extends TestCase
         $this->assertSame('collections_summary', $frame->intent);
         $this->assertTrue($frame->filters['trend']);
         $this->assertSame('month', $frame->filters['trend_granularity']);
-        $this->assertSame('2026-05-01', $frame->timeRange['from']);
+        $this->assertSame(now()->subMonths(5)->startOfMonth()->toDateString(), $frame->timeRange['from']);
     }
 
     public function test_explanation_uses_previous_period_when_not_explicit(): void

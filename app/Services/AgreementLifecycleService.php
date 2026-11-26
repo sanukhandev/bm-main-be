@@ -7,6 +7,7 @@ use App\Exceptions\ApiException;
 use App\Models\Branch;
 use App\Models\OwnerAgreement;
 use App\Models\TenantAgreement;
+use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -33,7 +34,7 @@ class AgreementLifecycleService
             if ($to === AgreementStatus::PendingApproval->value) {
                 $this->assertComplete($type, $agreement, $branchId);
             }
-            if ($type === 'tenant' && in_array($to, [AgreementStatus::Approved->value, AgreementStatus::Commenced->value], true)) {
+            if (in_array($to, [AgreementStatus::Approved->value, AgreementStatus::Commenced->value], true)) {
                 $this->assertComplete($type, $agreement, $branchId);
             }
             if ($to === AgreementStatus::Commenced->value && $this->today($branchId)->gt($this->agreementDate($agreement->end_date, $branchId))) {
@@ -174,7 +175,7 @@ class AgreementLifecycleService
             throw new ApiException('AGREEMENT_INCOMPLETE', 'The agreement must have an active party and at least one property.', 422);
         }
         $installments = DB::table($type === 'owner' ? 'owner_agreement_installments' : 'tenant_agreement_installments')->where($type === 'owner' ? 'owner_agreement_id' : 'tenant_agreement_id', $agreement->id)->get(['amount']);
-        if ($installments->count() !== (int) $agreement->payment_count || $this->cents($installments->sum(fn ($row) => (string) $row->amount)) !== $this->cents((string) $agreement->total_amount)) {
+        if ($installments->count() !== (int) $agreement->payment_count || Money::toCents($installments->sum(fn ($row) => (string) $row->amount)) !== Money::toCents((string) $agreement->total_amount)) {
             throw new ApiException('AGREEMENT_SCHEDULE_MISMATCH', 'The installment schedule does not reconcile with the agreement total.', 422);
         }
         if ($type === 'tenant') {
@@ -236,12 +237,5 @@ class AgreementLifecycleService
         return match ($to) {
             'pending_approval' => 'submit', 'approved' => 'approve', 'commenced' => 'commence', 'on_hold' => 'hold', 'expired' => 'expire', 'terminated' => 'terminate', 'cancelled' => 'cancel', default => $to,
         };
-    }
-
-    private function cents(string $amount): int
-    {
-        [$whole, $fraction] = array_pad(explode('.', $amount, 2), 2, '0');
-
-        return ((int) $whole * 100) + (int) str_pad(substr($fraction, 0, 2), 2, '0');
     }
 }

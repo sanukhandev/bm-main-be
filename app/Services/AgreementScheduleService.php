@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -11,7 +12,7 @@ class AgreementScheduleService
     {
         $table = $type === 'owner' ? 'owner_agreement_installments' : 'tenant_agreement_installments';
         $foreignKey = $type === 'owner' ? 'owner_agreement_id' : 'tenant_agreement_id';
-        $totalCents = $this->cents((string) $total);
+        $totalCents = Money::toCents($total);
         $base = intdiv($totalCents, $count);
         $remainder = $totalCents - ($base * $count);
         $date = CarbonImmutable::parse($startDate);
@@ -25,13 +26,13 @@ class AgreementScheduleService
                 'annually' => 12,
                 default => 1,
             };
-            $amount = array_key_exists('amount', $line) ? $this->cents((string) $line['amount']) : $base + ($number === 1 ? $remainder : 0);
+            $amount = array_key_exists('amount', $line) ? Money::toCents($line['amount']) : $base + ($number === 1 ? $remainder : 0);
             DB::table($table)->insert([
                 'branch_id' => $branchId,
                 $foreignKey => $agreementId,
                 'installment_no' => $number,
                 'due_date' => $line['due_date'] ?? ($date->gt($periodEnd) ? $periodEnd->toDateString() : $date->toDateString()),
-                'amount' => number_format($amount / 100, 2, '.', ''),
+                'amount' => Money::formatCents($amount),
                 'paid_amount' => 0,
                 'payment_mode' => $paymentMode,
                 'category' => $line['category'],
@@ -42,12 +43,5 @@ class AgreementScheduleService
             ]);
             $date = $date->addMonths($step);
         }
-    }
-
-    private function cents(string $amount): int
-    {
-        [$whole, $fraction] = array_pad(explode('.', $amount, 2), 2, '0');
-
-        return ((int) $whole * 100) + (int) str_pad(substr($fraction, 0, 2), 2, '0');
     }
 }

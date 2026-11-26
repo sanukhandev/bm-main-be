@@ -37,6 +37,15 @@ return new class extends Migration
 
         if (DB::getDriverName() === 'sqlite') {
             Schema::disableForeignKeyConstraints();
+            // SQLite retains the original vendors reference unless it is rebuilt first.
+            foreach (['work_orders', 'quotations', 'invoices'] as $tableName) {
+                if (Schema::hasTable($tableName)) {
+                    Schema::table($tableName, fn (Blueprint $table) => $table->dropForeign(['vendor_id']));
+                    if ($tableName === 'work_orders') {
+                        Schema::table($tableName, fn (Blueprint $table) => $table->dropForeign(['vendor_id', 'branch_id']));
+                    }
+                }
+            }
         } else {
             $constraints = DB::select("SELECT DISTINCT TABLE_NAME, CONSTRAINT_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE REFERENCED_TABLE_SCHEMA = DATABASE() AND REFERENCED_TABLE_NAME = 'vendors'");
             foreach ($constraints as $constraint) {

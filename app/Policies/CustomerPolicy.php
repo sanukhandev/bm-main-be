@@ -20,17 +20,17 @@ class CustomerPolicy
 
     public function create(User $user): bool
     {
-        return $user->isActive() && app(BranchContext::class)->isResolved();
+        return $user->isActive() && app(BranchContext::class)->isResolved() && $user->hasPermission('customers.manage', app(BranchContext::class)->id());
     }
 
     public function update(User $user, Customer $customer): bool
     {
-        return $user->isActive() && $this->matchesBranch($customer);
+        return $user->isActive() && $this->matchesBranch($customer) && $user->hasPermission('customers.manage', (int) $customer->branch_id);
     }
 
     public function delete(User $user, Customer $customer): bool
     {
-        return $user->isActive() && $this->matchesBranch($customer);
+        return $user->isActive() && $this->matchesBranch($customer) && $user->hasPermission('customers.manage', (int) $customer->branch_id);
     }
 
     private function matchesBranch(Customer $customer): bool

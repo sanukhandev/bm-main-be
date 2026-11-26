@@ -24,6 +24,6 @@ class InvoicePayment extends Model
 
     public function accountTransaction()
     {
-        return $this->hasOne(AccountTransaction::class, 'source_id')->where('source_type', 'invoice_payment');
+        return $this->hasOne(AccountTransaction::class, 'source_id')->where('branch_id', $this->branch_id)->where('status', 'posted')->where('source_type', 'invoice_payment')->latest('id');
     }
 }

@@ -123,4 +123,13 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    'rate_limits' => [
+        'login' => max(1, (int) env('LOGIN_RATE_LIMIT', 5)),
+        'login_ip' => max(1, (int) env('LOGIN_IP_RATE_LIMIT', 20)),
+        'api' => max(1, (int) env('API_RATE_LIMIT', 60)),
+        'ai' => max(1, (int) env('AI_RATE_LIMIT', 15)),
+        'identity_extract' => max(1, (int) env('IDENTITY_EXTRACT_RATE_LIMIT', 6)),
+        'pdf' => max(1, (int) env('PDF_RATE_LIMIT', 10)),
+    ],
+
 ];

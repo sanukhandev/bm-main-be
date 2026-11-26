@@ -7,12 +7,15 @@ use App\Enums\PaymentDirection;
 use App\Enums\PaymentMode;
 use App\Enums\PostingStatus;
 use App\Exceptions\ApiException;
+use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class AccountTransaction extends Model
 {
+    use BelongsToBranch;
+
     protected static function booted(): void
     {
         static::creating(function (self $transaction): void {
@@ -32,10 +35,9 @@ class AccountTransaction extends Model
     }
 
     protected $fillable = [
-        'branch_id', 'document_no', 'direction', 'transaction_date', 'payment_mode', 'amount',
+        'document_no', 'direction', 'transaction_date', 'payment_mode', 'amount',
         'party_customer_id', 'source_type', 'source_id', 'payment_sequence', 'remarks',
-        'cheque_no', 'cheque_date', 'cheque_status', 'cheque_status_changed_at', 'cheque_status_changed_by', 'bank_name', 'bank_reference', 'transfer_date',
-        'status', 'created_by', 'posted_by', 'posted_at', 'idempotency_key',
+        'cheque_no', 'cheque_date', 'bank_name', 'bank_reference', 'transfer_date',
     ];
 
     protected function casts(): array

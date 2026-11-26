@@ -34,8 +34,8 @@ confidence must be an object of field names to numbers from 0 to 1. warnings mus
 of short strings. This is extraction only; do not create or update an ERP record.
 PROMPT;
 
-        $response = Http::timeout(90)->connectTimeout(15)->acceptJson()->post(
-            rtrim((string) config('services.gemini.base_url'), '/').'/models/'.rawurlencode((string) config('services.gemini.model')).':generateContent?key='.urlencode($key),
+        $response = Http::timeout(30)->connectTimeout(15)->withHeaders(['x-goog-api-key' => $key])->acceptJson()->post(
+            rtrim((string) config('services.gemini.base_url'), '/').'/models/'.rawurlencode((string) config('services.gemini.model')).':generateContent',
             [
                 'systemInstruction' => ['parts' => [['text' => $prompt]]],
                 'contents' => [[
@@ -70,13 +70,19 @@ PROMPT;
             if ($field === 'country_code' && is_string($value)) {
                 $value = $this->normalizeCountryCode($value);
             }
-            $result[$field] = is_string($value) ? trim($value) : null;
+            $result[$field] = is_string($value) ? mb_substr(trim($value), 0, 255) : null;
+        }
+        $confidence = [];
+        foreach ($fields as $field) {
+            if (is_numeric($data['confidence'][$field] ?? null)) {
+                $confidence[$field] = max(0, min(1, (float) $data['confidence'][$field]));
+            }
         }
 
         return [
             'fields' => $result,
-            'confidence' => is_array($data['confidence'] ?? null) ? $data['confidence'] : [],
-            'warnings' => array_values(array_filter($data['warnings'] ?? [], 'is_string')),
+            'confidence' => $confidence,
+            'warnings' => array_slice(array_map(fn (string $warning) => mb_substr($warning, 0, 200), array_values(array_filter($data['warnings'] ?? [], 'is_string'))), 0, 5),
         ];
     }
 

@@ -45,9 +45,9 @@ class BillingController extends Controller
         return new QuotationResource($service->quotation($context->branch(), $request->validated(), $request->user()->getAuthIdentifier(), $record));
     }
 
-    public function deleteQuotation(int $quotation, BranchContext $context)
+    public function deleteQuotation(int $quotation, BranchContext $context, BillingDocumentService $service, Request $request)
     {
-        Quotation::query()->forBranch($context->id())->findOrFail($quotation)->update(['status' => 'rejected']);
+        $service->rejectQuotation($context->branch(), $quotation, $request->user()->getAuthIdentifier());
 
         return response()->noContent();
     }
@@ -102,9 +102,9 @@ class BillingController extends Controller
         return new InvoiceResource($service->invoice($context->branch(), $request->validated(), $request->user()->getAuthIdentifier(), $record));
     }
 
-    public function deleteInvoice(int $invoice, BranchContext $context)
+    public function deleteInvoice(int $invoice, BranchContext $context, BillingDocumentService $service, Request $request)
     {
-        Invoice::query()->forBranch($context->id())->findOrFail($invoice)->update(['status' => 'void']);
+        $service->voidInvoice($context->branch(), $invoice, $request->user()->getAuthIdentifier());
 
         return response()->noContent();
     }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api\Zaakiy;
 
+use App\Services\ZaakiyService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -124,5 +125,13 @@ class ZaakiyStreamingAndNavigationTest extends TestCase
 
             return ! str_contains($body, '"navigations"');
         });
+    }
+
+    public function test_upstream_stream_line_is_bounded(): void
+    {
+        Http::fake(['*streamGenerateContent*' => Http::response(str_repeat('x', 65537), 200)]);
+
+        $this->expectException(\RuntimeException::class);
+        app(ZaakiyService::class)->stream('hello', [], [], static fn () => null);
     }
 }

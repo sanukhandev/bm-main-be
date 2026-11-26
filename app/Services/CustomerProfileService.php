@@ -54,7 +54,7 @@ class CustomerProfileService
             'start_date' => $agreement->start_date?->format('Y-m-d'),
             'end_date' => $agreement->end_date?->format('Y-m-d'),
             'status' => $agreement->status,
-            'total_amount' => $agreement->total_amount,
+            'total_amount' => $includeFinancial ? $agreement->total_amount : null,
             'payment_lines' => $includeFinancial ? $this->paymentLines($agreement) : [],
             'properties' => $agreement->properties->map(fn ($property) => [
                 'id' => $property->id,

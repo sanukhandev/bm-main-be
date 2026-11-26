@@ -16,7 +16,7 @@ class ExtractIdentityDocumentRequest extends FormRequest
         return [
             'role' => ['required', 'in:owner,tenant,vendor'],
             'customer_type' => ['sometimes', 'in:individual,organization'],
-            'document' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:10240'],
+            'document' => ['required', 'file', 'mimes:jpg,jpeg,png,pdf', 'max:5120'],
         ];
     }
 }

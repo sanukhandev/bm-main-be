@@ -16,7 +16,7 @@ class PostAgreementPaymentRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'amount' => ['required', 'numeric', 'min:0.01'],
+            'amount' => ['required', 'numeric', 'min:0.01', 'decimal:0,2'],
             'installment_id' => ['nullable', 'integer', 'min:1'],
             'payment_mode' => ['required', Rule::enum(PaymentMode::class)],
             'payment_date' => ['required', 'date_format:Y-m-d'],

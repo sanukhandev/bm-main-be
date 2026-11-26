@@ -11,6 +11,12 @@ class TimeRangeResolver
         $now ??= CarbonImmutable::now(config('app.timezone'));
         $query = mb_strtolower($message);
 
+        if (preg_match('/(?:last|next)\s+(\d+)\s+days?/', $query, $span) === 1 && (int) $span[1] > 3660
+            || preg_match('/last\s+(\d+)\s+weeks?/', $query, $span) === 1 && (int) $span[1] > 520
+            || preg_match('/last\s+(\d+)\s+months?/', $query, $span) === 1 && (int) $span[1] > 120) {
+            return null;
+        }
+
         if (preg_match('/(?:from|between)\s+(\d{4}-\d{2}-\d{2})\s+(?:to|and)\s+(\d{4}-\d{2}-\d{2})/', $query, $match) === 1) {
             return ['from' => $match[1], 'to' => $match[2]];
         }

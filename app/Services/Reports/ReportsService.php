@@ -6,6 +6,7 @@ use App\Models\AccountTransaction;
 use App\Models\OwnerAgreement;
 use App\Models\TenantAgreement;
 use App\Support\Branch\BranchContext;
+use App\Support\SqlLike;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -71,11 +72,11 @@ class ReportsService
             ->when($request->query('customer_id'), fn ($q, $value) => $q->where('party_customer_id', $value))
             ->when($request->query('search'), function ($q, $value) {
                 $q->where(function ($inner) use ($value) {
-                    $inner->where('document_no', 'like', "%{$value}%")
-                        ->orWhere('remarks', 'like', "%{$value}%")
-                        ->orWhere('cheque_no', 'like', "%{$value}%")
-                        ->orWhere('bank_reference', 'like', "%{$value}%")
-                        ->orWhereHas('party', fn ($party) => $party->where('display_name', 'like', "%{$value}%"));
+                    $inner->whereRaw("document_no LIKE ? ESCAPE '!'", [SqlLike::contains($value)])
+                        ->orWhereRaw("remarks LIKE ? ESCAPE '!'", [SqlLike::contains($value)])
+                        ->orWhereRaw("cheque_no LIKE ? ESCAPE '!'", [SqlLike::contains($value)])
+                        ->orWhereRaw("bank_reference LIKE ? ESCAPE '!'", [SqlLike::contains($value)])
+                        ->orWhereHas('party', fn ($party) => $party->whereRaw("display_name LIKE ? ESCAPE '!'", [SqlLike::contains($value)]));
                 });
             })
             ->latest('transaction_date')->latest('id');
@@ -110,7 +111,7 @@ class ReportsService
         $base = AccountTransaction::query()->with('party')->where('branch_id', $context->id())->where('source_type', 'petty_cash')->where('status', 'posted');
         $opening = (float) $this->pettyBalanceBefore($context->id(), $from);
         $filtered = (clone $base)->whereBetween('transaction_date', [$from, $to])->when($request->query('direction'), fn ($q, $v) => $q->where('direction', $v))->when($request->query('search'), fn ($q, $v) => $q->where(function ($i) use ($v) {
-            $i->where('document_no', 'like', "%{$v}%")->orWhere('remarks', 'like', "%{$v}%");
+            $i->whereRaw("document_no LIKE ? ESCAPE '!'", [SqlLike::contains($v)])->orWhereRaw("remarks LIKE ? ESCAPE '!'", [SqlLike::contains($v)]);
         }))->orderBy('transaction_date')->orderBy('id');
         $totalIn = (clone $filtered)->where('direction', 'inward')->sum('amount');
         $totalOut = (clone $filtered)->where('direction', 'outward')->sum('amount');
@@ -122,7 +123,7 @@ class ReportsService
             });
             $before->when($request->query('direction'), fn ($q, $v) => $q->where('direction', $v));
             $before->when($request->query('search'), function ($q, $v) {
-                $q->where('document_no', 'like', "%{$v}%")->orWhere('remarks', 'like', "%{$v}%");
+                $q->whereRaw("document_no LIKE ? ESCAPE '!'", [SqlLike::contains($v)])->orWhereRaw("remarks LIKE ? ESCAPE '!'", [SqlLike::contains($v)]);
             });
             $running += (float) $before->sum(DB::raw("CASE WHEN direction = 'inward' THEN amount ELSE -amount END"));
         }
@@ -147,7 +148,7 @@ class ReportsService
             ->when($request->query('property_id'), fn ($q, $v) => $q->whereHas('properties', fn ($p) => $p->where('properties.id', $v)))
             ->when($request->query('search'), function ($q, $v) {
                 $q->where(function ($inner) use ($v) {
-                    $inner->where('agreement_no', 'like', "%{$v}%")->orWhereHas('owner', fn ($c) => $c->where('display_name', 'like', "%{$v}%"))->orWhereHas('tenant', fn ($c) => $c->where('display_name', 'like', "%{$v}%"))->orWhereHas('properties', fn ($p) => $p->where('name', 'like', "%{$v}%")->orWhere('property_code', 'like', "%{$v}%"));
+                    $inner->whereRaw("agreement_no LIKE ? ESCAPE '!'", [SqlLike::contains($v)])->orWhereHas('owner', fn ($c) => $c->whereRaw("display_name LIKE ? ESCAPE '!'", [SqlLike::contains($v)]))->orWhereHas('tenant', fn ($c) => $c->whereRaw("display_name LIKE ? ESCAPE '!'", [SqlLike::contains($v)]))->orWhereHas('properties', fn ($p) => $p->whereRaw("name LIKE ? ESCAPE '!'", [SqlLike::contains($v)])->orWhereRaw("property_code LIKE ? ESCAPE '!'", [SqlLike::contains($v)]));
                 });
             })->orderByDesc('start_date')->orderByDesc('id');
     }
@@ -180,7 +181,7 @@ class ReportsService
 
     private function expiryRows(Builder $query, string $type, ?string $from, string $to, Request $request): Collection
     {
-        $query->whereDate('end_date', '<=', $to)->when($from, fn ($q) => $q->whereDate('end_date', '>=', $from))->whereNotIn('status', ['cancelled', 'terminated'])->when($request->query('status'), fn ($q, $v) => $q->where('status', $v))->when($request->query('search'), fn ($q, $v) => $q->where('agreement_no', 'like', "%{$v}%"));
+        $query->whereDate('end_date', '<=', $to)->when($from, fn ($q) => $q->whereDate('end_date', '>=', $from))->whereNotIn('status', ['cancelled', 'terminated'])->when($request->query('status'), fn ($q, $v) => $q->where('status', $v))->when($request->query('search'), fn ($q, $v) => $q->whereRaw("agreement_no LIKE ? ESCAPE '!'", [SqlLike::contains($v)]));
 
         return $query->get()->map(fn ($agreement) => ['agreement_type' => $type, 'agreement_id' => $agreement->id, 'agreement_no' => $agreement->agreement_no, 'customer' => $agreement->{$type}?->display_name, 'properties' => $agreement->properties->pluck('name')->values(), 'start_date' => $agreement->start_date?->format('Y-m-d'), 'end_date' => $agreement->end_date?->format('Y-m-d'), 'status' => $agreement->status, 'days_remaining' => now()->startOfDay()->diffInDays($agreement->end_date, false)]);
     }
@@ -192,7 +193,7 @@ class ReportsService
         $foreign = $type === 'tenant' ? 'tenant_agreement_id' : 'owner_agreement_id';
         $partyColumn = $type === 'tenant' ? 'tenant_customer_id' : 'owner_customer_id';
         $query = DB::table($table.' as installments')->join($agreementTable.' as agreements', 'agreements.id', '=', 'installments.'.$foreign)->join('customers', 'customers.id', '=', 'agreements.'.$partyColumn)->where('installments.branch_id', $context->id())->whereColumn('installments.paid_amount', '<', 'installments.amount')->select('installments.*', 'agreements.agreement_no', 'agreements.'.$partyColumn, 'customers.display_name as party_name')->when($request->query('date_from'), fn ($q, $v) => $q->whereDate('installments.due_date', '>=', $v))->when($request->query('date_to'), fn ($q, $v) => $q->whereDate('installments.due_date', '<=', $v))->when($request->query('customer_id'), fn ($q, $v) => $q->where('agreements.'.$partyColumn, $v))->when($request->query('agreement_id'), fn ($q, $v) => $q->where('agreements.id', $v))->when($request->query('overdue_only'), fn ($q) => $q->whereDate('installments.due_date', '<', now()->toDateString()))->when($request->query('search'), fn ($q, $v) => $q->where(function ($i) use ($v) {
-            $i->where('agreements.agreement_no', 'like', "%{$v}%")->orWhere('customers.display_name', 'like', "%{$v}%");
+            $i->whereRaw("agreements.agreement_no LIKE ? ESCAPE '!'", [SqlLike::contains($v)])->orWhereRaw("customers.display_name LIKE ? ESCAPE '!'", [SqlLike::contains($v)]);
         }))->orderBy('installments.due_date');
         $summaryQuery = clone $query;
         $summary = ['total_outstanding' => $summaryQuery->sum(DB::raw('installments.amount - installments.paid_amount')), 'total_overdue' => (clone $query)->whereDate('installments.due_date', '<', now()->toDateString())->sum(DB::raw('installments.amount - installments.paid_amount')), 'overdue_installments' => (clone $query)->whereDate('installments.due_date', '<', now()->toDateString())->count(), 'parties_with_outstanding' => (clone $query)->distinct('agreements.'.$partyColumn)->count('agreements.'.$partyColumn)];

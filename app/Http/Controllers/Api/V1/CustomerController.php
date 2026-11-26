@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Customers\ExtractIdentityDocumentRequest;
 use App\Http\Requests\Api\V1\Customers\IndexCustomerRequest;
@@ -9,17 +10,20 @@ use App\Http\Requests\Api\V1\Customers\StoreCustomerRequest;
 use App\Http\Requests\Api\V1\Customers\UpdateCustomerRequest;
 use App\Http\Resources\Api\V1\CustomerResource;
 use App\Models\Customer;
+use App\Models\User;
 use App\Services\AuditService;
 use App\Services\CustomerProfileService;
 use App\Services\DocumentNumberGenerator;
 use App\Services\IdentityDocumentExtractionService;
 use App\Services\IdentityVerificationService;
 use App\Support\Branch\BranchContext;
+use App\Support\SqlLike;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class CustomerController extends Controller
 {
@@ -28,7 +32,7 @@ class CustomerController extends Controller
         Gate::authorize('create', Customer::class);
 
         $result = $extractor->extract($request->file('document'), $request->validated('role'), $request->validated('customer_type', 'individual'));
-        $result['verification_token'] = $verification->issue($result['fields']['identity_no'] ?? null, $request->user(), app(BranchContext::class)->id());
+        $result['verification_token'] = $verification->issue($result['fields']['identity_no'] ?? null, $request->user(), app(BranchContext::class)->id(), $request->validated('customer_type', 'individual'));
 
         return ['data' => $result];
     }
@@ -46,9 +50,9 @@ class CustomerController extends Controller
             $search = $filters['search'];
             $phoneSearch = preg_replace('/\D+/', '', $search) ?? '';
             $query->where(function ($query) use ($search, $phoneSearch) {
-                $query->where('display_name', 'like', "%{$search}%")
-                    ->orWhere('customer_code', 'like', "%{$search}%")
-                    ->orWhere('email', 'like', "%{$search}%");
+                $query->whereRaw("display_name LIKE ? ESCAPE '!'", [SqlLike::contains($search)])
+                    ->orWhereRaw("customer_code LIKE ? ESCAPE '!'", [SqlLike::contains($search)])
+                    ->orWhereRaw("email LIKE ? ESCAPE '!'", [SqlLike::contains($search)]);
                 if ($phoneSearch !== '') {
                     $phonePattern = "%{$phoneSearch}%";
                     $query->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ?", [$phonePattern])
@@ -77,25 +81,31 @@ class CustomerController extends Controller
         unset($data['identity_verification_token']);
         $roles = $data['roles'] ?? [];
         unset($data['roles']);
+        $this->authorizeVendorMutation($request->user(), $branchContext->id(), $roles);
         $this->applyPhoneNumbers($data);
         $this->applyRepresentative($data, $roles);
         $data['customer_code'] ??= $numbers->next($branchContext->branch(), in_array('owner', $roles, true) ? 'OWNER_CUSTOMER' : (in_array('vendor', $roles, true) ? 'VENDOR_CUSTOMER' : 'TENANT_CUSTOMER'), (int) now()->format('Y'));
         $actor = $request->user();
-        $customer = DB::transaction(function () use ($data, $roles, $branchContext, $identityVerificationToken, $verification, $actor): Customer {
-            $customer = new Customer($data);
-            $customer->forceFill([
-                'branch_id' => $branchContext->id(),
-                'status' => 'active',
-            ])->save();
-            if ($identityVerificationToken) {
-                $verification->assertValid($identityVerificationToken, $customer->identity_no, $actor, $branchContext->id());
-                $customer->forceFill(['identity_verified_at' => now()])->save();
-            }
-            $this->syncRoles($customer, $roles, $branchContext->id());
-            app(AuditService::class)->record('customer.created', $customer, null, [...$customer->only(['customer_code', 'display_name', 'customer_type', 'phone', 'phone_numbers_json', 'representative_json', 'status']), 'roles' => $roles], [], $branchContext->id());
+        try {
+            $customer = DB::transaction(function () use ($data, $roles, $branchContext, $identityVerificationToken, $verification, $actor): Customer {
+                $customer = new Customer($data);
+                $customer->forceFill([
+                    'branch_id' => $branchContext->id(),
+                    'status' => 'active',
+                ])->save();
+                if ($identityVerificationToken) {
+                    $verification->assertValid($identityVerificationToken, $customer->identity_no, $actor, $branchContext->id(), $customer->customer_type);
+                    $customer->forceFill(['identity_verified_at' => now()])->save();
+                }
+                $this->syncRoles($customer, $roles, $branchContext->id());
+                app(AuditService::class)->record('customer.created', $customer, null, [...$customer->only(['customer_code', 'display_name', 'customer_type', 'phone', 'phone_numbers_json', 'representative_json', 'status']), 'roles' => $roles], [], $branchContext->id());
 
-            return $customer;
-        });
+                return $customer;
+            });
+        } catch (Throwable $exception) {
+            $verification->release($identityVerificationToken);
+            throw $exception;
+        }
 
         return new CustomerResource($customer->load('businessRoles'));
     }
@@ -128,10 +138,14 @@ class CustomerController extends Controller
         if (array_key_exists('identity_no', $data) && $customer->identity_verified_at !== null && $data['identity_no'] !== $customer->identity_no) {
             throw ValidationException::withMessages(['identity_no' => 'A verified Emirates ID cannot be modified.']);
         }
+        if ($customer->identity_verified_at !== null && array_intersect(array_keys($data), ['customer_type', 'display_name', 'legal_name'])) {
+            throw ValidationException::withMessages(['display_name' => 'Verified customer identity cannot be changed.']);
+        }
         $roles = $data['roles'] ?? null;
         unset($data['roles']);
         $this->applyPhoneNumbers($data, $customer);
         $effectiveRoles = $roles ?? $customer->businessRoles()->pluck('role')->all();
+        $this->authorizeVendorMutation($request->user(), (int) $customer->branch_id, $effectiveRoles);
         $this->applyRepresentative($data, $effectiveRoles, $customer);
         DB::transaction(function () use ($customer, $data, $roles): void {
             $before = [...$customer->only(['customer_code', 'display_name', 'customer_type', 'status', 'phone', 'phone_numbers_json', 'representative_json', 'email']), 'roles' => $customer->businessRoles()->pluck('role')->values()->all()];
@@ -145,13 +159,25 @@ class CustomerController extends Controller
         return new CustomerResource($customer->refresh()->load('businessRoles'));
     }
 
-    public function destroy(Customer $customer)
+    public function destroy(Customer $customer, AuditService $audit)
     {
         Gate::authorize('delete', $customer);
+        if ($customer->businessRoles()->where('role', 'vendor')->exists()) {
+            $this->authorizeVendorMutation(request()->user(), (int) $customer->branch_id, ['vendor']);
+        }
+        $before = $customer->only(['customer_code', 'display_name', 'customer_type', 'status']);
         $customer->forceFill(['status' => 'archived'])->save();
         $customer->delete();
+        $audit->record('customer.deleted', $customer, $before, [...$before, 'status' => 'archived'], [], $customer->branch_id);
 
         return response()->noContent();
+    }
+
+    private function authorizeVendorMutation(User $user, int $branchId, array $roles): void
+    {
+        if (in_array('vendor', $roles, true) && ! $user->hasPermission('maintenance.manage', $branchId)) {
+            throw new ApiException('FORBIDDEN', 'You do not have permission to manage vendors.', 403);
+        }
     }
 
     private function applyPhoneNumbers(array &$data, ?Customer $customer = null): void

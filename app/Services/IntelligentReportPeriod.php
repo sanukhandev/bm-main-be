@@ -19,6 +19,9 @@ final readonly class IntelligentReportPeriod
             }
             $start = CarbonImmutable::parse($from, config('app.timezone'));
             $end = CarbonImmutable::parse($to, config('app.timezone'));
+            if ($start->diffInDays($end) > 366) {
+                throw ValidationException::withMessages(['date_to' => 'Custom report periods cannot exceed 366 days.']);
+            }
         } else {
             [$start, $end] = match ($key) {
                 'last_month' => [$now->subMonth()->startOfMonth(), $now->subMonth()->endOfMonth()],

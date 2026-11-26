@@ -73,9 +73,9 @@ class ReadOrchestrator
     {
         $intent = $this->analyzer->analyze($message, $history);
         $conversation = $this->conversation->resolve($rawConversation, $intent, $message, $branch);
-        $intent = $this->conversation->applyToIntent($intent, $conversation, $message);
         $execution = new ZaakiyExecutionContext($user, $branch, $intent, now()->toIso8601String(), $conversation);
         $conversation = $this->entities->reauthorize($conversation, $execution);
+        $intent = $this->conversation->applyToIntent($intent, $conversation, $message);
         $execution = new ZaakiyExecutionContext($user, $branch, $intent, $execution->requestAt, $conversation);
         $skills = [
             'identity' => $this->identity, 'accounts' => $this->accounts, 'maintenance' => $this->maintenance,

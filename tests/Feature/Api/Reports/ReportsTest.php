@@ -37,12 +37,24 @@ class ReportsTest extends TestCase
             ['branch_id' => $this->branchA, 'document_no' => 'A-CH-1', 'direction' => 'inward', 'transaction_date' => '2026-09-23', 'payment_mode' => 'cheque', 'amount' => '50.00', 'source_type' => 'manual', 'status' => 'posted', 'created_by' => $this->apiUser->id, 'posted_by' => $this->apiUser->id, 'posted_at' => now(), 'cheque_status' => 'received', 'created_at' => now(), 'updated_at' => now()],
         ]);
 
-        $this->branchRequest()->getJson('/api/v1/reports/daily-cash-movement?date_from=2026-09-23&date_to=2026-09-23')->assertOk()->assertJsonPath('data.0.cash_in', 100);
+        $cashIn = $this->branchRequest()->getJson('/api/v1/reports/daily-cash-movement?date_from=2026-09-23&date_to=2026-09-23')->assertOk()->json('data.0.cash_in');
+        $this->assertSame(100.0, (float) $cashIn);
         $this->branchRequest()->getJson('/api/v1/reports/inward-receipts')->assertOk()->assertJsonPath('meta.summary.transaction_count', 2);
     }
 
     public function test_invalid_report_date_range_is_rejected(): void
     {
         $this->branchRequest()->getJson('/api/v1/reports/owner-agreements?date_from=2026-09-24&date_to=2026-09-23')->assertUnprocessable();
+    }
+
+    public function test_report_search_treats_like_metacharacters_as_literals_and_rejects_arrays(): void
+    {
+        DB::table('account_transactions')->insert([
+            'branch_id' => $this->branchA, 'document_no' => 'A%SPECIAL', 'direction' => 'inward', 'transaction_date' => '2026-09-23', 'payment_mode' => 'cash', 'amount' => '10.00', 'source_type' => 'manual', 'status' => 'posted', 'created_by' => $this->apiUser->id, 'posted_by' => $this->apiUser->id, 'posted_at' => now(), 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->branchRequest()->getJson('/api/v1/reports/inward-receipts?search=%25')
+            ->assertOk()->assertJsonPath('meta.summary.transaction_count', 1)->assertJsonPath('data.0.document_no', 'A%SPECIAL');
+        $this->branchRequest()->getJson('/api/v1/reports/inward-receipts?search[]=forged')->assertUnprocessable();
     }
 }

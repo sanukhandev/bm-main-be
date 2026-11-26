@@ -9,6 +9,7 @@ use App\Models\Branch;
 use App\Services\AuditService;
 use App\Services\DocumentNumberGenerator;
 use App\Services\PaymentModeDetails;
+use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -22,12 +23,23 @@ class PostAgreementPayment
             if ($idempotencyKey) {
                 $existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first();
                 if ($existing) {
+                    if ($existing->source_type !== "{$type}_agreement" || $existing->source_id !== $agreementId) {
+                        throw new ApiException('IDEMPOTENCY_KEY_CONFLICT', 'This idempotency key was used for a different payment.', 409);
+                    }
+
                     return $existing->load('allocations', 'party');
                 }
             }
 
             $agreementTable = $type === 'owner' ? 'owner_agreements' : 'tenant_agreements';
             $agreement = DB::table($agreementTable)->where('branch_id', $branch->id)->where('id', $agreementId)->lockForUpdate()->first();
+            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first())) {
+                if ($existing->source_type !== "{$type}_agreement" || $existing->source_id !== $agreementId) {
+                    throw new ApiException('IDEMPOTENCY_KEY_CONFLICT', 'This idempotency key was used for a different payment.', 409);
+                }
+
+                return $existing->load('allocations', 'party');
+            }
             if (! $agreement || ! in_array($agreement->status, ['approved', 'commenced'], true)) {
                 throw new ApiException('AGREEMENT_NOT_PAYABLE', 'The agreement is not payable.', 422);
             }
@@ -43,8 +55,8 @@ class PostAgreementPayment
                     throw new ApiException('PAYMENT_ALREADY_POSTED', 'This installment has no outstanding balance.', 422);
                 }
             }
-            $amountCents = $this->cents((string) $data['amount']);
-            $outstandingCents = $installments->sum(fn ($row) => $this->cents((string) $row->amount) - $this->cents((string) $row->paid_amount));
+            $amountCents = Money::toCents($data['amount']);
+            $outstandingCents = $installments->sum(fn ($row) => Money::toCents((string) $row->amount) - Money::toCents((string) $row->paid_amount));
             if ($amountCents < 1) {
                 throw new ApiException('INVALID_PAYMENT_AMOUNT', 'Payment amount must be greater than zero.', 422);
             }
@@ -61,13 +73,13 @@ class PostAgreementPayment
             $partyId = $direction === 'outward' ? $agreement->owner_customer_id : $agreement->tenant_customer_id;
             $paymentSequence = ((int) DB::table('account_transactions')->where('branch_id', $branch->id)->where('source_type', "{$type}_agreement")->where('source_id', $agreementId)->lockForUpdate()->max('payment_sequence')) + 1;
             $details = PaymentModeDetails::normalize($data, $paymentSequence);
-            $transaction = AccountTransaction::query()->create([
+            $transaction = AccountTransaction::query()->forceCreate([
                 'branch_id' => $branch->id,
                 'document_no' => $this->numbers->next($branch, $documentType, (int) CarbonImmutable::parse($data['payment_date'], $branch->timezone)->format('Y')),
                 'direction' => $direction,
                 'transaction_date' => $data['payment_date'],
                 'payment_mode' => $details['payment_mode'],
-                'amount' => number_format($amountCents / 100, 2, '.', ''),
+                'amount' => Money::formatCents($amountCents),
                 'party_customer_id' => $partyId,
                 'source_type' => "{$type}_agreement",
                 'source_id' => $agreementId,
@@ -90,10 +102,10 @@ class PostAgreementPayment
                 if ($remaining === 0) {
                     break;
                 }
-                $balance = $this->cents((string) $installment->amount) - $this->cents((string) $installment->paid_amount);
+                $balance = Money::toCents((string) $installment->amount) - Money::toCents((string) $installment->paid_amount);
                 $allocated = min($remaining, $balance);
                 DB::table($installmentTable)->where('branch_id', $branch->id)->where($installmentKey, $agreementId)->where('id', $installment->id)->update([
-                    'paid_amount' => number_format(($this->cents((string) $installment->paid_amount) + $allocated) / 100, 2, '.', ''),
+                    'paid_amount' => Money::formatCents(Money::toCents((string) $installment->paid_amount) + $allocated),
                     'status' => $allocated === $balance ? 'paid' : 'partially_paid',
                     'updated_at' => now(),
                 ]);
@@ -101,7 +113,7 @@ class PostAgreementPayment
                     'branch_id' => $branch->id,
                     'account_transaction_id' => $transaction->id,
                     $type === 'owner' ? 'owner_agreement_installment_id' : 'tenant_agreement_installment_id' => $installment->id,
-                    'amount' => number_format($allocated / 100, 2, '.', ''),
+                    'amount' => Money::formatCents($allocated),
                 ]);
                 $remaining -= $allocated;
             }

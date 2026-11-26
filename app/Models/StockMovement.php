@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Model;
 
 class StockMovement extends Model
 {
+    use BelongsToBranch;
+
     protected $fillable = ['branch_id', 'inventory_item_id', 'movement_type', 'quantity', 'unit_cost', 'reference_type', 'reference_id', 'occurred_at', 'created_by', 'notes'];
 
     protected function casts(): array

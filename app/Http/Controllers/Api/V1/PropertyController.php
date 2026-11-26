@@ -17,6 +17,7 @@ use App\Services\AuditService;
 use App\Services\PropertyAvailabilityService;
 use App\Services\PropertyProfileService;
 use App\Support\Branch\BranchContext;
+use App\Support\SqlLike;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -33,9 +34,10 @@ class PropertyController extends Controller
 
         if (! empty($filters['search'])) {
             $search = $filters['search'];
-            $query->where(fn ($query) => $query->where('name', 'like', "%{$search}%")
-                ->orWhere('property_code', 'like', "%{$search}%")
-                ->orWhere('unit_number', 'like', "%{$search}%"));
+            $pattern = SqlLike::contains($search);
+            $query->where(fn ($query) => $query->whereRaw("name LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("property_code LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereRaw("unit_number LIKE ? ESCAPE '!'", [$pattern]));
         }
 
         $query->when($filters['status'] ?? null, fn ($query, $value) => $query->where('status', $value));
@@ -62,9 +64,9 @@ class PropertyController extends Controller
         $query->when($filters['property_type'] ?? null, fn ($query, $value) => $query->where('property_type', $value));
         $query->when($filters['owner_customer_id'] ?? null, fn ($query, $value) => $query->where('owner_customer_id', $value));
         $query->when($filters['search'] ?? null, fn ($query, $value) => $query->where(fn ($query) => $query
-            ->where('name', 'like', "%{$value}%")
-            ->orWhere('property_code', 'like', "%{$value}%")
-            ->orWhere('unit_number', 'like', "%{$value}%")));
+            ->whereRaw("name LIKE ? ESCAPE '!'", [SqlLike::contains($value)])
+            ->orWhereRaw("property_code LIKE ? ESCAPE '!'", [SqlLike::contains($value)])
+            ->orWhereRaw("unit_number LIKE ? ESCAPE '!'", [SqlLike::contains($value)])));
 
         return PropertyResource::collection($query->orderBy('name')->paginate($filters['per_page'] ?? 25));
     }
@@ -133,11 +135,13 @@ class PropertyController extends Controller
         return new PropertyResource($property->refresh()->load('owner'));
     }
 
-    public function destroy(Property $property): Response
+    public function destroy(Property $property, AuditService $audit): Response
     {
         Gate::authorize('delete', $property);
+        $before = $property->only(['property_code', 'name', 'status']);
         $property->forceFill(['status' => 'archived'])->save();
         $property->delete();
+        $audit->record('property.deleted', $property, $before, [...$before, 'status' => 'archived'], [], $property->branch_id);
 
         return response()->noContent();
     }

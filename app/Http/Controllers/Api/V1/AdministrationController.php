@@ -21,6 +21,7 @@ use App\Models\User;
 use App\Services\AuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class AdministrationController extends Controller
 {
@@ -111,6 +112,9 @@ class AdministrationController extends Controller
             $this->syncAccess($user, $data['branch_ids'], $roles);
             $after = $this->accessSnapshot($user->fresh());
             app(AuditService::class)->record('user.updated', $user, $before, $after, [], null, $request->user()->id);
+            if (isset($data['password']) || $before !== $after) {
+                $this->revokeAccessCredentials($user);
+            }
 
             return response()->json(['data' => $this->userPayload($user->fresh())]);
         });
@@ -129,6 +133,9 @@ class AdministrationController extends Controller
 
         $before = ['status' => $user->status];
         $user->forceFill(['status' => $status])->save();
+        if ($status !== 'active') {
+            $this->revokeAccessCredentials($user);
+        }
         app(AuditService::class)->record($status === 'active' ? 'user.activated' : 'user.deactivated', $user, $before, ['status' => $status], [], null, $request->user()->id);
 
         return response()->json(['data' => $this->userPayload($user->fresh())]);
@@ -144,8 +151,8 @@ class AdministrationController extends Controller
     public function storeRole(StoreRoleRequest $request)
     {
         $data = $request->validated();
-        $role = DB::transaction(function () use ($data) {
-            $role = Role::query()->create([
+        $role = DB::transaction(function () use ($data, $request) {
+            $role = Role::query()->forceCreate([
                 'key' => $data['key'],
                 'name' => $data['name'],
                 'scope' => 'branch',
@@ -153,6 +160,7 @@ class AdministrationController extends Controller
                 'is_system' => false,
             ]);
             $this->syncRolePermissions($role, $data['permission_keys'] ?? []);
+            app(AuditService::class)->record('role.created', $role, null, $this->rolePayload($role->load('permissions')), [], null, $request->user()->id);
 
             return $role->load('permissions');
         });
@@ -162,8 +170,12 @@ class AdministrationController extends Controller
 
     public function updateRole(UpdateRoleRequest $request, Role $role)
     {
+        if ($role->is_system) {
+            throw new ApiException('SYSTEM_ROLE_IMMUTABLE', 'System roles cannot be modified.', 422);
+        }
+        $before = $this->rolePayload($role->load('permissions'));
         $data = $request->validated();
-        $role = DB::transaction(function () use ($data, $role) {
+        $role = DB::transaction(function () use ($data, $role, $before, $request) {
             $role->update([
                 'name' => $data['name'],
                 'description' => $data['description'] ?? null,
@@ -172,7 +184,10 @@ class AdministrationController extends Controller
                 $this->syncRolePermissions($role, $data['permission_keys']);
             }
 
-            return $role->load('permissions');
+            $role->load('permissions');
+            app(AuditService::class)->record('role.updated', $role, $before, $this->rolePayload($role), [], null, $request->user()->id);
+
+            return $role;
         });
 
         return response()->json(['data' => $this->rolePayload($role)]);
@@ -188,13 +203,16 @@ class AdministrationController extends Controller
     public function storePermission(StorePermissionRequest $request)
     {
         $permission = Permission::query()->create($request->validated());
+        app(AuditService::class)->record('permission.created', $permission, null, $permission->only(['key', 'name']), [], null, $request->user()->id);
 
         return response()->json(['data' => $permission->only(['id', 'key', 'name'])], 201);
     }
 
     public function updatePermission(UpdatePermissionRequest $request, Permission $permission)
     {
+        $before = $permission->only(['key', 'name']);
         $permission->update($request->validated());
+        app(AuditService::class)->record('permission.updated', $permission, $before, $permission->fresh()->only(['key', 'name']), [], null, $request->user()->id);
 
         return response()->json(['data' => $permission->fresh()->only(['id', 'key', 'name'])]);
     }
@@ -217,6 +235,16 @@ class AdministrationController extends Controller
             'is_system' => (bool) $role->is_system,
             'permissions' => $role->permissions->pluck('key')->values()->all(),
         ];
+    }
+
+    private function revokeAccessCredentials(User $user): void
+    {
+        if (config('session.driver') === 'database' && Schema::hasTable(config('session.table', 'sessions'))) {
+            DB::table(config('session.table', 'sessions'))->where('user_id', $user->id)->delete();
+        }
+        if (Schema::hasTable('personal_access_tokens')) {
+            DB::table('personal_access_tokens')->where('tokenable_type', $user->getMorphClass())->where('tokenable_id', $user->id)->delete();
+        }
     }
 
     private function syncRolePermissions(Role $role, array $keys): void

@@ -27,13 +27,19 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('login', function (Request $request) {
             $email = Str::lower(trim((string) $request->input('email')));
 
-            return Limit::perMinute((int) env('LOGIN_RATE_LIMIT', 5))
-                ->by($email.'|'.$request->ip());
+            return [
+                Limit::perMinute((int) config('app.rate_limits.login', 5))->by($email.'|'.$request->ip()),
+                Limit::perMinute((int) config('app.rate_limits.login_ip', 20))->by($request->ip()),
+            ];
         });
 
         RateLimiter::for('api', function (Request $request) {
-            return Limit::perMinute((int) env('API_RATE_LIMIT', 60))
+            return Limit::perMinute((int) config('app.rate_limits.api', 60))
                 ->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip()));
         });
+
+        RateLimiter::for('ai', fn (Request $request) => Limit::perMinute((int) config('app.rate_limits.ai', 15))->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        RateLimiter::for('identity-extract', fn (Request $request) => Limit::perMinute((int) config('app.rate_limits.identity_extract', 6))->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        RateLimiter::for('pdf', fn (Request $request) => Limit::perMinute((int) config('app.rate_limits.pdf', 10))->by((string) ($request->user()?->getAuthIdentifier() ?? $request->ip())));
     }
 }

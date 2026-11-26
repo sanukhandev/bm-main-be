@@ -39,8 +39,12 @@ class Property360SkillTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        DB::statement('PRAGMA foreign_keys = OFF');
-        DB::statement('CREATE TABLE vendors (id INTEGER PRIMARY KEY AUTOINCREMENT, branch_id INTEGER, name VARCHAR(255), UNIQUE (id, branch_id))');
+        if (DB::getDriverName() === 'sqlite') {
+            DB::statement('PRAGMA foreign_keys = OFF');
+            DB::statement('CREATE TABLE vendors (id INTEGER PRIMARY KEY AUTOINCREMENT, branch_id INTEGER, name VARCHAR(255), UNIQUE (id, branch_id))');
+        } else {
+            DB::statement('CREATE TABLE IF NOT EXISTS vendors (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, branch_id BIGINT UNSIGNED NULL, name VARCHAR(255) NULL)');
+        }
         DB::table('work_orders')->insert([
             'branch_id' => $this->branchA,
             'work_order_no' => 'WO-A-001',
@@ -54,7 +58,9 @@ class Property360SkillTest extends TestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
-        DB::statement('PRAGMA foreign_keys = ON');
+        if (DB::getDriverName() === 'sqlite') {
+            DB::statement('PRAGMA foreign_keys = ON');
+        }
 
         $result = $this->runSkill('Show property P-A-204.');
 

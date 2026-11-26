@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\RecordUserActivity;
 use App\Models\AuditLog;
+use App\Support\IdentityNumber;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -17,7 +18,7 @@ class AuditService
         $actorId ??= $request?->user()?->getAuthIdentifier();
         $branchId ??= $entity?->getAttribute('branch_id');
         if ($request?->header('X-Activity-Page') && ! array_key_exists('page', $metadata)) {
-            $metadata['page'] = substr((string) $request->header('X-Activity-Page'), 0, 255);
+            $metadata['page'] = substr((string) (parse_url((string) $request->header('X-Activity-Page'), PHP_URL_PATH) ?: '/'), 0, 255);
         }
         $metadata = $this->clean($metadata);
         $snapshot = fn (?array $value): ?array => $value === null ? null : $this->clean($value);
@@ -79,7 +80,13 @@ class AuditService
             if (collect($sensitive)->contains(fn ($needle) => $keyString === $needle || str_contains($keyString, $needle))) {
                 continue;
             }
-            $result[$key] = is_array($item) ? $this->clean($item) : $item;
+            $result[$key] = is_array($item)
+                ? $this->clean($item)
+                : (in_array($keyString, ['identity_no', 'emirates_id'], true) && is_string($item)
+                    ? IdentityNumber::mask($item)
+                    : ($keyString === 'page' && is_string($item)
+                        ? substr((string) (parse_url($item, PHP_URL_PATH) ?: '/'), 0, 255)
+                        : $item));
         }
 
         return $result;

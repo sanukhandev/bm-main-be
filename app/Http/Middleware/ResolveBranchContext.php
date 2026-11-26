@@ -31,7 +31,7 @@ class ResolveBranchContext
             ->first();
 
         $user = $request->user();
-        $authorized = $user?->isSuperAdmin() || ($user && $user->hasBranchRole($branch?->getKey() ?? 0, 'branch_admin'));
+        $authorized = $user && $user->isActive() && ($user->isSuperAdmin() || ($branch && $user->belongsToBranch($branch->getKey())));
 
         if (! $branch || ! $authorized) {
             throw new ApiException('BRANCH_NOT_FOUND', 'Branch not found.', 404);

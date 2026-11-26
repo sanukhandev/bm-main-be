@@ -15,7 +15,7 @@ class CreatePettyCashEntry
     public function execute(Branch $branch, array $data, int $userId): AccountTransaction
     {
         return DB::transaction(function () use ($branch, $data, $userId) {
-            $transaction = AccountTransaction::query()->create([
+            $transaction = AccountTransaction::query()->forceCreate([
                 'branch_id' => $branch->id,
                 'document_no' => $this->numbers->next($branch, 'PETTY_CASH', (int) date('Y', strtotime($data['transaction_date']))),
                 'direction' => $data['direction'],

@@ -19,10 +19,21 @@ class PostAdditionalAgreementPayment
     {
         return DB::transaction(function () use ($type, $agreementId, $line, $branch, $userId, $idempotencyKey) {
             if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first())) {
+                if ($existing->source_type !== "{$type}_agreement_additional_payment" || $existing->source_id !== $line->id) {
+                    throw new ApiException('IDEMPOTENCY_KEY_CONFLICT', 'This idempotency key was used for a different payment.', 409);
+                }
+
                 return $existing->load('party');
             }
 
             $lockedLine = AgreementAdditionalPayment::query()->where('branch_id', $branch->id)->where('id', $line->id)->lockForUpdate()->firstOrFail();
+            if ($idempotencyKey && ($existing = AccountTransaction::query()->where('branch_id', $branch->id)->where('idempotency_key', $idempotencyKey)->first())) {
+                if ($existing->source_type !== "{$type}_agreement_additional_payment" || $existing->source_id !== $lockedLine->id) {
+                    throw new ApiException('IDEMPOTENCY_KEY_CONFLICT', 'This idempotency key was used for a different payment.', 409);
+                }
+
+                return $existing->load('party');
+            }
             if ($lockedLine->status === 'paid') {
                 throw new ApiException('PAYMENT_ALREADY_POSTED', 'This additional payment has already been posted.', 422);
             }
@@ -35,7 +46,7 @@ class PostAdditionalAgreementPayment
             // Agreement type is authoritative: owners are paid outward and tenants pay inward.
             $direction = $type === 'owner' ? 'outward' : 'inward';
             $details = PaymentModeDetails::normalize(['payment_mode' => $lockedLine->payment_mode, 'remarks' => $lockedLine->particulars, 'cheque_no' => $lockedLine->cheque_no, 'cheque_date' => $lockedLine->cheque_date, 'bank_name' => $lockedLine->bank_name, 'bank_reference' => $lockedLine->bank_reference, 'transfer_date' => $lockedLine->transfer_date]);
-            $transaction = AccountTransaction::query()->create([
+            $transaction = AccountTransaction::query()->forceCreate([
                 'branch_id' => $branch->id,
                 'document_no' => $this->numbers->next($branch, $direction === 'inward' ? 'INWARD_RECEIPT' : 'OUTWARD_RECEIPT', (int) now($branch->timezone)->format('Y')),
                 'direction' => $direction,

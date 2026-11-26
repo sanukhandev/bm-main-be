@@ -4,7 +4,7 @@ namespace App\Services\Zaakiy;
 
 class SensitiveDataFilter
 {
-    private const BLOCKED = ['password', 'password_confirmation', 'remember_token', 'token', 'api_key', 'secret', 'authorization', 'cookie', 'stack_trace'];
+    private const BLOCKED = ['password', 'password_confirmation', 'remember_token', 'token', 'api_key', 'secret', 'authorization', 'cookie', 'stack_trace', 'identity', 'emirates', 'passport', 'email', 'phone', 'address'];
 
     public function clean(mixed $value): mixed
     {

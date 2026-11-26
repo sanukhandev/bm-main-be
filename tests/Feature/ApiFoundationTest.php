@@ -51,6 +51,11 @@ class ApiFoundationTest extends TestCase
         $this->branchUser->refresh();
 
         $branchRole = DB::table('roles')->where('key', 'branch_admin')->value('id');
+        foreach (['accounts.view', 'accounts.post', 'accounts.void', 'audit.view', 'agreements.manage', 'agreements.override_coverage', 'billing.manage', 'maintenance.manage', 'customers.manage', 'properties.manage'] as $key) {
+            DB::table('permissions')->updateOrInsert(['key' => $key], ['name' => $key, 'created_at' => $now, 'updated_at' => $now]);
+            $permissionId = DB::table('permissions')->where('key', $key)->value('id');
+            DB::table('role_permissions')->updateOrInsert(['role_id' => $branchRole, 'permission_id' => $permissionId], []);
+        }
         DB::table('branch_user')->insert([
             'branch_id' => $this->branchA,
             'user_id' => $this->branchUser->getKey(),
@@ -249,8 +254,6 @@ class ApiFoundationTest extends TestCase
             'branch_id' => $this->branchA, 'tenant_agreement_id' => $tenant, 'property_id' => $property, 'source_owner_agreement_id' => $owner,
             'created_at' => $now, 'updated_at' => $now,
         ]);
-        $permission = DB::table('permissions')->insertGetId(['key' => 'accounts.view', 'name' => 'View accounts', 'created_at' => $now, 'updated_at' => $now]);
-        DB::table('role_permissions')->insert(['role_id' => DB::table('roles')->where('key', 'branch_admin')->value('id'), 'permission_id' => $permission]);
 
         $this->actingAs($this->branchUser, 'web');
         $response = $this->withHeader('X-Branch-Id', (string) $this->branchA)->getJson('/api/v1/dashboard/operational')->assertOk();
@@ -342,6 +345,8 @@ class ApiFoundationTest extends TestCase
         $managedId = $created->json('data.id');
         $this->assertDatabaseHas('branch_user', ['user_id' => $managedId, 'branch_id' => $this->branchA, 'is_default' => 1]);
         $this->assertDatabaseHas('branch_user_roles', ['user_id' => $managedId, 'branch_id' => $this->branchA]);
+        DB::table('sessions')->insert(['id' => 'managed-user-session', 'user_id' => $managedId, 'payload' => '', 'last_activity' => now()->timestamp]);
+        config(['session.driver' => 'database']);
 
         $this->patchJson('/api/v1/admin/users/'.$managedId, [
             'name' => 'Updated Managed User',
@@ -349,6 +354,7 @@ class ApiFoundationTest extends TestCase
             'branch_ids' => [$this->branchB],
             'roles' => ['branch_admin'],
         ])->assertOk()->assertJsonPath('data.name', 'Updated Managed User');
+        $this->assertDatabaseMissing('sessions', ['id' => 'managed-user-session']);
         $this->assertDatabaseMissing('branch_user', ['user_id' => $managedId, 'branch_id' => $this->branchA]);
         $this->assertDatabaseHas('branch_user', ['user_id' => $managedId, 'branch_id' => $this->branchB]);
 

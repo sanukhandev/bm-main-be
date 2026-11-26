@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Model;
 
 class WorkOrderLine extends Model
 {
+    use BelongsToBranch;
+
     protected $fillable = ['branch_id', 'work_order_id', 'line_type', 'inventory_item_id', 'description', 'quantity', 'unit_cost'];
 
     protected function casts(): array

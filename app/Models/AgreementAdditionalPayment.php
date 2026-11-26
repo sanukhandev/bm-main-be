@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Model;
 
 class AgreementAdditionalPayment extends Model
 {
+    use BelongsToBranch;
+
     protected $fillable = ['branch_id', 'owner_agreement_id', 'tenant_agreement_id', 'direction', 'category', 'particulars', 'amount', 'due_date', 'payment_mode', 'cheque_no', 'cheque_date', 'bank_name', 'bank_reference', 'transfer_date', 'status', 'terms', 'created_by'];
 
     protected function casts(): array
@@ -16,6 +19,9 @@ class AgreementAdditionalPayment extends Model
     public function accountTransaction()
     {
         return $this->hasOne(AccountTransaction::class, 'source_id')
-            ->whereIn('source_type', ['owner_agreement_additional_payment', 'tenant_agreement_additional_payment']);
+            ->where('branch_id', $this->branch_id)
+            ->where('status', 'posted')
+            ->whereIn('source_type', ['owner_agreement_additional_payment', 'tenant_agreement_additional_payment'])
+            ->latest('id');
     }
 }

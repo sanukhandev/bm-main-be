@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToBranch;
 use Illuminate\Database\Eloquent\Model;
 
 class AccountTransactionAllocation extends Model
 {
+    use BelongsToBranch;
+
     protected $fillable = [
         'branch_id', 'account_transaction_id', 'owner_agreement_installment_id',
         'tenant_agreement_installment_id', 'amount',

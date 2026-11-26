@@ -7,6 +7,8 @@ use RuntimeException;
 
 class ZaakiyService
 {
+    private const MAX_STREAM_LINE_BYTES = 65536;
+
     public function stream(string $message, array $history, array $context, callable $emit): void
     {
         $key = (string) config('services.gemini.key');
@@ -83,7 +85,18 @@ PROMPT;
         $buffer = '';
         while (! $body->eof()) {
             $buffer .= $body->read(1024);
-            while (($newline = strpos($buffer, "\n")) !== false) {
+            while (true) {
+                $newline = strpos($buffer, "\n");
+                if ($newline === false) {
+                    if (strlen($buffer) > self::MAX_STREAM_LINE_BYTES) {
+                        throw new RuntimeException('Zaakiy returned an oversized response line.');
+                    }
+
+                    break;
+                }
+                if ($newline > self::MAX_STREAM_LINE_BYTES) {
+                    throw new RuntimeException('Zaakiy returned an oversized response line.');
+                }
                 $line = trim(substr($buffer, 0, $newline));
                 $buffer = substr($buffer, $newline + 1);
                 if (! str_starts_with($line, 'data:')) {
