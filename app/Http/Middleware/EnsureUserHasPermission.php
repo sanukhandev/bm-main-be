@@ -11,9 +11,12 @@ class EnsureUserHasPermission
 {
     public function __construct(private readonly BranchContext $context) {}
 
-    public function handle(Request $request, Closure $next, string $permission): Response
+    public function handle(Request $request, Closure $next, string ...$permissions): Response
     {
-        abort_unless($request->user()?->hasPermission($permission, $this->context->id()), 403);
+        $allowed = collect($permissions)->contains(
+            fn (string $required): bool => $request->user()?->hasPermission($required, $this->context->id()) ?? false,
+        );
+        abort_unless($allowed, 403);
 
         return $next($request);
     }

@@ -44,11 +44,13 @@ class ZaakiyAgentLoop
         User $user,
         BranchContext $branch,
         callable $emit,
+        array $history = [],
     ): array {
         $loopStart = hrtime(true);
         $resolvedThread = $thread instanceof ZaakiyThread
             ? $thread
             : $this->resolveThread($thread, $user, $branch);
+        $isNewThread = $resolvedThread === null;
 
         if ($resolvedThread === null) {
             $resolvedThread = new ZaakiyThread;
@@ -69,7 +71,7 @@ class ZaakiyAgentLoop
             'content' => $message,
         ])->save();
 
-        $contents = $this->buildHistoryContents($resolvedThread);
+        $contents = $this->buildHistoryContents($resolvedThread, $isNewThread ? $history : []);
         $systemInstruction = $this->systemInstruction($branch);
         $declarations = $this->registry->declarationsFor($user, $branch->id());
 
@@ -259,26 +261,38 @@ class ZaakiyAgentLoop
     }
 
     /** @return array<int, array<string, mixed>> */
-    private function buildHistoryContents(ZaakiyThread $thread): array
+    private function buildHistoryContents(ZaakiyThread $thread, array $clientHistory = []): array
     {
+        $contents = [];
+        foreach (array_slice($clientHistory, -11) as $item) {
+            if (! is_array($item) || ! in_array($item['role'] ?? null, ['user', 'model'], true) || ! is_string($item['text'] ?? null)) {
+                continue;
+            }
+            $contents[] = [
+                'role' => $item['role'],
+                'parts' => [['text' => $item['text']]],
+            ];
+        }
+
         $messages = ZaakiyMessage::query()
             ->where('thread_id', $thread->id)
             ->orderByDesc('id')
-            ->limit(12)
+            ->limit(max(1, 12 - count($contents)))
             ->get(['role', 'content'])
             ->reverse()
             ->values();
 
-        $contents = [];
         foreach ($messages as $item) {
             $role = $item->role === 'model' ? 'model' : 'user';
-            if ($contents === [] && $role !== 'user') {
-                continue;
-            }
             $contents[] = [
                 'role' => $role,
                 'parts' => [['text' => (string) $item->content]],
             ];
+        }
+
+        $contents = array_slice($contents, -12);
+        while (($contents[0]['role'] ?? null) === 'model') {
+            array_shift($contents);
         }
 
         return $contents;

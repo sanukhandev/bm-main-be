@@ -55,7 +55,7 @@ class ZaakiyController extends Controller
 
             try {
                 if ($agenticEnabled) {
-                    $agentLoop->run($message, $resolvedThread, $user, $branch, $emit);
+                    $agentLoop->run($message, $resolvedThread, $user, $branch, $emit, $history);
 
                     return;
                 }

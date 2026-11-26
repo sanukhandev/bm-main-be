@@ -181,7 +181,7 @@ final class CollectionsHealthSkill implements ZaakiyReadSkill
     private function cheques(int $branchId, array $range, array &$records, array &$sources): array
     {
         $query = $this->paymentQuery($branchId)->where('transactions.payment_mode', 'cheque')->whereBetween('transactions.cheque_date', [$range['from'], $range['to']])->orderBy('transactions.cheque_date')->limit(20);
-        $counts = (clone $query)->selectRaw('transactions.cheque_status, COUNT(transactions.id) as count, COALESCE(SUM(transactions.amount), 0) as amount')->groupBy('transactions.cheque_status')->get()->keyBy('cheque_status');
+        $counts = (clone $query)->reorder()->selectRaw('transactions.cheque_status, COUNT(transactions.id) as count, COALESCE(SUM(transactions.amount), 0) as amount')->groupBy('transactions.cheque_status')->get()->keyBy('cheque_status');
         foreach ($query->get(['transactions.id', 'transactions.document_no', 'transactions.cheque_date', 'transactions.cheque_status', 'transactions.amount', 'transactions.party_customer_id']) as $cheque) {
             $records[] = ['type' => 'cheque', 'id' => $cheque->id, 'document_no' => $cheque->document_no, 'cheque_date' => $cheque->cheque_date, 'cheque_status' => $cheque->cheque_status, 'amount' => $cheque->amount, 'tenant_id' => $cheque->party_customer_id];
             $sources[] = $this->source('payment', $cheque->id, $cheque->document_no);

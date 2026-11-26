@@ -195,4 +195,29 @@ class ZaakiyAgentLoopTest extends TestCase
             'thread_id' => $thread->uuid,
         ])->assertNotFound();
     }
+
+    public function test_agent_loop_uses_client_history_when_legacy_caller_has_no_thread_id(): void
+    {
+        Http::fakeSequence('*')->push([
+            'candidates' => [[
+                'content' => ['role' => 'model', 'parts' => [['text' => 'The earlier property is Flat 101.']]],
+            ]],
+            'usageMetadata' => ['promptTokenCount' => 50, 'candidatesTokenCount' => 5],
+        ], 200);
+
+        $this->branchRequest()->postJson('/api/v1/ai/zaakiy/chat', [
+            'message' => 'What is its status?',
+            'history' => [
+                ['role' => 'user', 'text' => 'Tell me about Flat 101.'],
+                ['role' => 'model', 'text' => 'Flat 101 is a property in this branch.'],
+            ],
+            'conversation_context' => ['intent' => 'property_360'],
+        ])->assertOk()->streamedContent();
+
+        $contents = Http::recorded()->first()[0]->data()['contents'];
+        $this->assertSame('Tell me about Flat 101.', $contents[0]['parts'][0]['text']);
+        $this->assertSame('Flat 101 is a property in this branch.', $contents[1]['parts'][0]['text']);
+        $this->assertSame('What is its status?', $contents[2]['parts'][0]['text']);
+        $this->assertDatabaseCount('zaakiy_messages', 2);
+    }
 }

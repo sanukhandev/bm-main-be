@@ -103,6 +103,24 @@ class SecurityHardeningTest extends TestCase
         }
     }
 
+    public function test_billing_reads_allow_accounts_view_or_billing_manage(): void
+    {
+        $roleId = DB::table('branch_user_roles')
+            ->where('branch_id', $this->branchA)
+            ->where('user_id', $this->apiUser->id)
+            ->value('role_id');
+        $accountsViewId = DB::table('permissions')->where('key', 'accounts.view')->value('id');
+        $billingManageId = DB::table('permissions')->where('key', 'billing.manage')->value('id');
+
+        DB::table('role_permissions')->where('role_id', $roleId)->where('permission_id', $accountsViewId)->delete();
+        $this->branchRequest()->getJson('/api/v1/quotations')->assertOk();
+        $this->branchRequest()->getJson('/api/v1/invoices')->assertOk();
+
+        DB::table('role_permissions')->where('role_id', $roleId)->where('permission_id', $billingManageId)->delete();
+        $this->branchRequest()->getJson('/api/v1/quotations')->assertForbidden();
+        $this->branchRequest()->getJson('/api/v1/invoices')->assertForbidden();
+    }
+
     public function test_agreement_status_and_lifecycle_metadata_cannot_be_forged(): void
     {
         $property = DB::table('properties')->insertGetId([
