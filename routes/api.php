@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\V1\PropertyController;
 use App\Http\Controllers\Api\V1\ReportsController;
 use App\Http\Controllers\Api\V1\TenantAgreementController;
 use App\Http\Controllers\Api\V1\UserActivityController;
+use App\Http\Controllers\Api\V1\ZaakiyActionController;
 use App\Http\Controllers\Api\V1\ZaakiyController;
 use App\Http\Controllers\Api\V1\ZaakiyThreadController;
 use Illuminate\Support\Facades\Route;
@@ -58,6 +59,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/ai/zaakiy/threads/{thread}', [ZaakiyThreadController::class, 'show']);
         Route::delete('/ai/zaakiy/threads/{thread}', [ZaakiyThreadController::class, 'destroy']);
         Route::post('/ai/zaakiy/messages/{message}/feedback', [ZaakiyThreadController::class, 'feedback']);
+        Route::post('/ai/zaakiy/actions/{proposal}/confirm', [ZaakiyActionController::class, 'confirm']);
+        Route::post('/ai/zaakiy/actions/{proposal}/reject', [ZaakiyActionController::class, 'reject']);
         Route::get('/audit-logs', [AuditLogController::class, 'index'])->middleware('permission:audit.view');
         Route::post('/activity-logs', [UserActivityController::class, 'store']);
         Route::get('/reports/owner-agreements', [ReportsController::class, 'ownerAgreements']);

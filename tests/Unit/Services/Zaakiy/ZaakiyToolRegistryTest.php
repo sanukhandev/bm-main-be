@@ -4,6 +4,9 @@ namespace Tests\Unit\Services\Zaakiy;
 
 use App\Models\Branch;
 use App\Models\User;
+use App\Models\ZaakiyThread;
+use App\Services\Zaakiy\Agent\ZaakiyAgentTool;
+use App\Services\Zaakiy\Agent\ZaakiyToolOutput;
 use App\Services\Zaakiy\Agent\ZaakiyToolRegistry;
 use App\Support\Branch\BranchContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -64,11 +67,19 @@ class ZaakiyToolRegistryTest extends TestCase
         $this->assertContains('search_erp_faq', $readOnlyNames);
         $this->assertNotContains('get_collections_health', $readOnlyNames);
         $this->assertNotContains('get_intelligent_report', $readOnlyNames);
+        $this->assertNotContains('propose_work_order', $readOnlyNames);
+        $this->assertNotContains('propose_petty_cash_entry', $readOnlyNames);
+        $this->assertNotContains('propose_customer_draft', $readOnlyNames);
+        $this->assertNotContains('propose_agreement_lifecycle', $readOnlyNames);
+        $this->assertContains('propose_prefilled_navigation', $readOnlyNames);
 
-        $this->assertCount(14, $fullNames);
+        $this->assertCount(20, $fullNames);
         $this->assertContains('get_collections_health', $fullNames);
         $this->assertContains('get_intelligent_report', $fullNames);
         $this->assertContains('query_erp_reports', $fullNames);
+        $this->assertContains('propose_work_order', $fullNames);
+        $this->assertContains('propose_petty_cash_entry', $fullNames);
+        $this->assertContains('propose_agreement_lifecycle', $fullNames);
 
         foreach ($registry->declarationsFor($this->apiUser, $this->branchA) as $declaration) {
             $props = array_keys($declaration['parameters']['properties'] ?? []);
@@ -135,5 +146,56 @@ class ZaakiyToolRegistryTest extends TestCase
         $this->assertContains('Ahmed Al Mansoori', $labels);
         $this->assertContains('Ahmed Khan', $labels);
         $this->assertNotContains('Ahmed Sharjah', $labels);
+    }
+
+    public function test_registry_scrubs_identity_and_secret_fields_from_tool_payloads(): void
+    {
+        $registry = app(ZaakiyToolRegistry::class);
+        $registry->register(new class implements ZaakiyAgentTool
+        {
+            public function name(): string
+            {
+                return 'test_identity_echo';
+            }
+
+            public function statusLabel(): string
+            {
+                return 'Testing...';
+            }
+
+            public function declaration(): array
+            {
+                return ['name' => $this->name(), 'description' => 'test', 'parameters' => ['type' => 'OBJECT', 'properties' => []]];
+            }
+
+            public function requiredPermissions(): array
+            {
+                return [];
+            }
+
+            public function isWriteProposal(): bool
+            {
+                return false;
+            }
+
+            public function execute(array $args, User $user, BranchContext $branch, ?ZaakiyThread $thread = null): ZaakiyToolOutput
+            {
+                return new ZaakiyToolOutput(modelPayload: [
+                    'display_name' => 'Safe Name',
+                    'identity_no' => '784-1990-1234567-1',
+                    'emirates_id' => '784-1990-1234567-1',
+                    'password' => 'top-secret',
+                ]);
+            }
+        });
+
+        $branchContext = new BranchContext;
+        $branchContext->set(Branch::query()->findOrFail($this->branchA));
+        $out = $registry->execute('test_identity_echo', [], $this->apiUser, $branchContext);
+
+        $this->assertSame('Safe Name', $out->modelPayload['display_name'] ?? null);
+        $this->assertArrayNotHasKey('identity_no', $out->modelPayload);
+        $this->assertArrayNotHasKey('emirates_id', $out->modelPayload);
+        $this->assertArrayNotHasKey('password', $out->modelPayload);
     }
 }

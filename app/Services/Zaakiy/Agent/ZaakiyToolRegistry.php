@@ -4,11 +4,16 @@ namespace App\Services\Zaakiy\Agent;
 
 use App\Models\User;
 use App\Models\ZaakiyThread;
-use App\Services\AuditService;
 use App\Services\Zaakiy\Agent\Tools\AnalyticsReadTool;
 use App\Services\Zaakiy\Agent\Tools\Entity360ReadTool;
 use App\Services\Zaakiy\Agent\Tools\IntelligentReportTool;
 use App\Services\Zaakiy\Agent\Tools\LookupEntitiesTool;
+use App\Services\Zaakiy\Agent\Tools\ProposeAgreementLifecycleTool;
+use App\Services\Zaakiy\Agent\Tools\ProposeCustomerDraftTool;
+use App\Services\Zaakiy\Agent\Tools\ProposePettyCashTool;
+use App\Services\Zaakiy\Agent\Tools\ProposePrefilledNavigationTool;
+use App\Services\Zaakiy\Agent\Tools\ProposeWorkOrderStatusTool;
+use App\Services\Zaakiy\Agent\Tools\ProposeWorkOrderTool;
 use App\Services\Zaakiy\Agent\Tools\QueryErpReportsTool;
 use App\Services\Zaakiy\Agent\Tools\SearchErpFaqTool;
 use App\Services\Zaakiy\SensitiveDataFilter;
@@ -23,6 +28,7 @@ use App\Services\Zaakiy\Skills\RenewalIntelligenceSkill;
 use App\Services\Zaakiy\Skills\Tenant360Skill;
 use App\Services\Zaakiy\Skills\VacancyAnalysisSkill;
 use App\Support\Branch\BranchContext;
+use App\Support\IdentityNumber;
 
 class ZaakiyToolRegistry
 {
@@ -45,6 +51,12 @@ class ZaakiyToolRegistry
         IntelligentReportTool $intelligentReport,
         QueryErpReportsTool $queryErpReports,
         SearchErpFaqTool $searchErpFaq,
+        ProposeWorkOrderTool $proposeWorkOrder,
+        ProposeWorkOrderStatusTool $proposeWorkOrderStatus,
+        ProposeCustomerDraftTool $proposeCustomerDraft,
+        ProposePettyCashTool $proposePettyCash,
+        ProposeAgreementLifecycleTool $proposeAgreementLifecycle,
+        ProposePrefilledNavigationTool $proposePrefilledNavigation,
     ) {
         $propertyTypes = ['apartment', 'villa', 'shop', 'office', 'space', 'labor_camp', 'warehouse', 'land'];
 
@@ -78,6 +90,12 @@ class ZaakiyToolRegistry
             $intelligentReport,
             $queryErpReports,
             $searchErpFaq,
+            $proposeWorkOrder,
+            $proposeWorkOrderStatus,
+            $proposeCustomerDraft,
+            $proposePettyCash,
+            $proposeAgreementLifecycle,
+            $proposePrefilledNavigation,
         ] as $tool) {
             $this->register($tool);
         }
@@ -168,7 +186,7 @@ class ZaakiyToolRegistry
         foreach ($value as $key => $item) {
             $normalized = strtolower((string) $key);
             if (is_string($item) && in_array($normalized, ['identity_no', 'emirates_id'], true)) {
-                $result[$key] = AuditService::maskIdentity($item);
+                $result[$key] = IdentityNumber::mask($item);
 
                 continue;
             }
